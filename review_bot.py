@@ -450,47 +450,81 @@ def get_kyobo_review_count(isbn: str, cache: dict) -> tuple:
 
 
 # ─── Discord 발송 ─────────────────────────────────────────────────────
+DASHBOARD_URL = "https://marketer-h.github.io/review-alarm/"
+REVIEWS_LOG_FILE = BASE_DIR / "reviews_log.json"
+
+def save_reviews_log(new_reviews: list):
+    """새 리뷰를 reviews_log.json에 누적 저장 (최근 180일치 유지)"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    log = []
+    if REVIEWS_LOG_FILE.exists():
+        with open(REVIEWS_LOG_FILE) as f:
+            log = json.load(f)
+    for rv in new_reviews:
+        log.append({
+            "date":     today,
+            "isbn":     rv.get("isbn", ""),
+            "title":    rv.get("title", ""),
+            "store":    rv.get("store", ""),
+            "id":       rv.get("id", ""),
+            "reviewer": rv.get("reviewer", ""),
+            "rating":   rv.get("rating", ""),
+            "text":     rv.get("text", ""),
+            "link":     rv.get("link", ""),
+        })
+    # 180일치만 유지
+    cutoff = (datetime.now().toordinal() - 180)
+    log = [r for r in log if date.fromisoformat(r["date"]).toordinal() >= cutoff]
+    with open(REVIEWS_LOG_FILE, "w") as f:
+        json.dump(log, f, ensure_ascii=False, indent=2)
+
+
 def send_discord(webhook_url: str, new_reviews: list):
+    """하루치 요약 1개 + 대시보드 링크 발송"""
     if not webhook_url:
         print("[Discord] config.json에 discord_webhook URL이 없습니다.")
         return
     if not new_reviews:
         return
 
-    embeds = []
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # 책별 집계
+    from collections import defaultdict
+    by_book: dict = defaultdict(lambda: defaultdict(int))
     for rv in new_reviews:
-        store = rv["store"]
-        text = rv.get("text", "")
-        if len(text) > 350:
-            text = text[:347] + "..."
+        by_book[rv["title"]][rv["store"]] += 1
 
-        embed = {
-            "title": f"{STORE_EMOJI.get(store, '📚')} 새 구매평 | {rv['title']}",
-            "url": rv.get("link", ""),
-            "description": text or "(내용 없음)",
-            "color": STORE_COLORS.get(store, 0x7289DA),
-            "fields": [
-                {"name": "서점", "value": STORE_NAMES.get(store, store), "inline": True},
-            ],
-            "footer": {"text": f"리뷰어: {rv.get('reviewer', '?')}"},
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-        }
-        if rv.get("rating"):
-            embed["fields"].append({"name": "별점", "value": f"⭐ {rv['rating']}", "inline": True})
-        embeds.append(embed)
+    # 책별 요약 텍스트
+    lines = []
+    for title, stores in sorted(by_book.items(), key=lambda x: -sum(x[1].values())):
+        total = sum(stores.values())
+        store_detail = "  ".join(
+            f"{STORE_EMOJI[s]} {STORE_NAMES[s]} {n}개"
+            for s, n in stores.items() if s in STORE_EMOJI
+        )
+        lines.append(f"**{title[:30]}** — {total}개\n{store_detail}")
 
-    for i in range(0, len(embeds), 10):
-        batch = embeds[i:i + 10]
-        try:
-            r = requests.post(webhook_url, json={"embeds": batch}, timeout=10)
-            if r.status_code not in (200, 204):
-                print(f"[Discord] 발송 실패: HTTP {r.status_code} — {r.text[:100]}")
-            else:
-                print(f"[Discord] {len(batch)}개 알림 발송 완료")
-        except Exception as e:
-            print(f"[Discord] 오류: {e}")
-        if i + 10 < len(embeds):
-            time.sleep(1)
+    description = "\n\n".join(lines)
+    total_count = len(new_reviews)
+
+    embed = {
+        "title": f"📬 오늘의 서점 리뷰 알림 — 총 {total_count}개",
+        "description": description,
+        "color": 0x3B82F6,
+        "fields": [{"name": "전체 리뷰 보기", "value": f"[대시보드 열기]({DASHBOARD_URL})", "inline": False}],
+        "footer": {"text": f"이지스퍼블리싱 서점 리뷰 봇 · {today}"},
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+    try:
+        r = requests.post(webhook_url, json={"embeds": [embed]}, timeout=10)
+        if r.status_code not in (200, 204):
+            print(f"[Discord] 발송 실패: HTTP {r.status_code}")
+        else:
+            print(f"[Discord] 서점 리뷰 요약 알림 발송 완료 ({total_count}개)")
+    except Exception as e:
+        print(f"[Discord] 오류: {e}")
 
 
 # ─── 메인 ────────────────────────────────────────────────────────────
@@ -549,6 +583,7 @@ def main():
             if new:
                 for rv in new:
                     rv["store"] = "aladin"
+                    rv["isbn"] = isbn
                 found.extend(new)
             all_ids = list(seen | {rv["id"] for rv in reviews})
             state[isbn]["aladin"] = all_ids[-300:]
@@ -560,6 +595,7 @@ def main():
             if new:
                 for rv in new:
                     rv["store"] = "yes24"
+                    rv["isbn"] = isbn
                 found.extend(new)
             all_ids = list(seen | {rv["id"] for rv in reviews})
             state[isbn]["yes24"] = all_ids[-300:]
@@ -573,6 +609,7 @@ def main():
                     diff = curr_count - prev_count
                     found.append({
                         "store": "kyobo",
+                        "isbn": isbn,
                         "id": f"kyobo_{isbn}_{curr_count}",
                         "reviewer": "",
                         "rating": "",
@@ -592,15 +629,16 @@ def main():
     save_state(state)
     save_cache(cache)
 
-    print(f"\n[완료] 새 구매평 {len(all_new)}개")
+    print(f"\n[완료] 새 서점 리뷰 {len(all_new)}개")
 
     if args.init:
         print("[초기화] 기준점이 저장됐습니다. 이제 cron으로 정기 실행하세요.")
         print(f"  bash {BASE_DIR}/setup_cron.sh")
     elif all_new:
+        save_reviews_log(all_new)
         send_discord(webhook_url, all_new)
     else:
-        print("[알림 없음] 새 구매평이 없습니다.")
+        print("[알림 없음] 새 서점 리뷰가 없습니다.")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>이지스퍼블리싱 서점 리뷰 대시보드</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; color: #1e293b; }
+
+header {
+  background: linear-gradient(135deg, #0f2744, #1e3a5f);
+  color: #fff; padding: 20px 32px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+header h1 { font-size: 18px; font-weight: 700; }
+header span { font-size: 12px; color: #93c5fd; }
+
+.toolbar {
+  display: flex; gap: 12px; align-items: center;
+  padding: 16px 32px; background: #fff; border-bottom: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+.toolbar input, .toolbar select {
+  padding: 7px 12px; border: 1px solid #e2e8f0; border-radius: 8px;
+  font-size: 13px; outline: none; background: #f8fafc;
+}
+.toolbar input { width: 220px; }
+.count-badge {
+  margin-left: auto; font-size: 13px; color: #64748b;
+  background: #f1f5f9; padding: 6px 14px; border-radius: 20px;
+}
+
+.main { max-width: 1100px; margin: 24px auto; padding: 0 24px; }
+
+.date-group { margin-bottom: 32px; }
+.date-label {
+  font-size: 13px; font-weight: 700; color: #64748b;
+  text-transform: uppercase; letter-spacing: .5px;
+  margin-bottom: 12px; padding-bottom: 8px;
+  border-bottom: 2px solid #e2e8f0;
+  display: flex; align-items: center; gap: 8px;
+}
+.date-label .day-count {
+  background: #3b82f6; color: #fff;
+  font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+}
+
+.book-group { margin-bottom: 16px; }
+.book-title {
+  font-size: 14px; font-weight: 700; color: #1e293b;
+  padding: 10px 16px; background: #fff; border-radius: 10px 10px 0 0;
+  border: 1px solid #e2e8f0; border-bottom: none;
+  display: flex; align-items: center; gap: 8px;
+}
+.book-title a { color: inherit; text-decoration: none; }
+.book-title a:hover { text-decoration: underline; }
+
+.review-list { border: 1px solid #e2e8f0; border-radius: 0 0 10px 10px; overflow: hidden; }
+.review-item {
+  padding: 14px 16px; background: #fff; border-bottom: 1px solid #f1f5f9;
+  display: grid; grid-template-columns: 80px 1fr; gap: 12px;
+}
+.review-item:last-child { border-bottom: none; }
+.review-item:hover { background: #fafbfc; }
+
+.review-meta { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.store-badge {
+  font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+}
+.store-badge.aladin  { background: #fef2f2; color: #ef4128; }
+.store-badge.yes24   { background: #fff7ed; color: #f97316; }
+.store-badge.kyobo   { background: #f0fdf4; color: #009261; }
+.review-rating { font-size: 12px; color: #f59e0b; }
+.review-reviewer { font-size: 11px; color: #94a3b8; }
+
+.review-body { display: flex; flex-direction: column; gap: 4px; }
+.review-text { font-size: 13px; line-height: 1.6; color: #374151; }
+.review-date { font-size: 11px; color: #94a3b8; }
+
+.empty { text-align: center; padding: 60px; color: #94a3b8; font-size: 14px; }
+.loading { text-align: center; padding: 80px; color: #64748b; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📚 이지스퍼블리싱 서점 리뷰 대시보드</h1>
+    <span id="last-updated">불러오는 중...</span>
+  </div>
+</header>
+
+<div class="toolbar">
+  <input type="text" id="search" placeholder="책 제목 또는 리뷰 내용 검색...">
+  <select id="store-filter">
+    <option value="">전체 서점</option>
+    <option value="aladin">알라딘</option>
+    <option value="yes24">예스24</option>
+    <option value="kyobo">교보문고</option>
+  </select>
+  <select id="date-filter">
+    <option value="">전체 날짜</option>
+  </select>
+  <span class="count-badge" id="count-badge">0개</span>
+</div>
+
+<div class="main" id="main">
+  <div class="loading">리뷰 데이터를 불러오는 중...</div>
+</div>
+
+<script>
+let allReviews = [];
+
+const storeLabel = s => ({ aladin:'알라딘', yes24:'예스24', kyobo:'교보문고' }[s] || s);
+
+function stars(rating) {
+  const n = parseInt(rating);
+  if (!n) return '';
+  return '⭐'.repeat(Math.min(n, 5)) + ` ${n}`;
+}
+
+function render(reviews) {
+  const main = document.getElementById('main');
+  document.getElementById('count-badge').textContent = `${reviews.length}개`;
+  if (!reviews.length) {
+    main.innerHTML = '<div class="empty">조건에 맞는 리뷰가 없습니다.</div>';
+    return;
+  }
+
+  const byDate = {};
+  reviews.forEach(r => {
+    (byDate[r.date] = byDate[r.date] || {})[r.title] =
+      (byDate[r.date][r.title] || []).concat(r);
+  });
+
+  let html = '';
+  Object.keys(byDate).sort((a,b)=>b.localeCompare(a)).forEach(date => {
+    const dayCount = Object.values(byDate[date]).reduce((s,a)=>s+a.length,0);
+    html += `<div class="date-group">
+      <div class="date-label">${date} <span class="day-count">${dayCount}개</span></div>`;
+
+    Object.entries(byDate[date]).sort((a,b)=>b[1].length-a[1].length).forEach(([title, rvs]) => {
+      const link = rvs.find(r=>r.link)?.link || '#';
+      html += `<div class="book-group">
+        <div class="book-title">
+          <a href="${link}" target="_blank">${title}</a>
+          <span style="font-size:11px;color:#94a3b8;font-weight:400">× ${rvs.length}</span>
+        </div>
+        <div class="review-list">`;
+
+      rvs.forEach(rv => {
+        html += `<div class="review-item">
+          <div class="review-meta">
+            <span class="store-badge ${rv.store}">${storeLabel(rv.store)}</span>
+            ${rv.rating ? `<span class="review-rating">${stars(rv.rating)}</span>` : ''}
+            <span class="review-reviewer">${rv.reviewer||''}</span>
+          </div>
+          <div class="review-body">
+            <div class="review-text">${rv.text||'(내용 없음)'}</div>
+            <div class="review-date">${rv.date}</div>
+          </div>
+        </div>`;
+      });
+      html += `</div></div>`;
+    });
+    html += `</div>`;
+  });
+  main.innerHTML = html;
+}
+
+function applyFilters() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const store = document.getElementById('store-filter').value;
+  const dateVal = document.getElementById('date-filter').value;
+  render(allReviews.filter(r =>
+    (!store || r.store === store) &&
+    (!dateVal || r.date === dateVal) &&
+    (!q || r.title.toLowerCase().includes(q) || (r.text||'').toLowerCase().includes(q))
+  ));
+}
+
+async function load() {
+  try {
+    const res = await fetch('reviews_log.json?_=' + Date.now());
+    allReviews = (await res.json()).sort((a,b)=>b.date.localeCompare(a.date));
+
+    const dates = [...new Set(allReviews.map(r=>r.date))].sort((a,b)=>b.localeCompare(a));
+    const sel = document.getElementById('date-filter');
+    dates.forEach(d => { const o = document.createElement('option'); o.value=o.textContent=d; sel.appendChild(o); });
+
+    document.getElementById('last-updated').textContent =
+      `마지막 업데이트: ${dates[0]||'-'} | 총 ${allReviews.length}개`;
+    render(allReviews);
+  } catch(e) {
+    document.getElementById('main').innerHTML =
+      '<div class="empty">reviews_log.json을 불러올 수 없습니다.<br>봇이 아직 실행 전이거나 GitHub Pages 설정이 필요합니다.</div>';
+  }
+}
+
+document.getElementById('search').addEventListener('input', applyFilters);
+document.getElementById('store-filter').addEventListener('change', applyFilters);
+document.getElementById('date-filter').addEventListener('change', applyFilters);
+load();
+</script>
+</body>
+</html>
