@@ -21,7 +21,9 @@ import json
 import re
 import time
 import warnings
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
+
+KST = timezone(timedelta(hours=9))
 from pathlib import Path
 
 import requests
@@ -450,12 +452,12 @@ def get_kyobo_review_count(isbn: str, cache: dict) -> tuple:
 
 
 # ─── Discord 발송 ─────────────────────────────────────────────────────
-DASHBOARD_URL = "https://marketer-h.github.io/review-alarm/"
+DASHBOARD_URL = "https://marketer-h.github.io/review-alarm/dashboard.html"
 REVIEWS_LOG_FILE = BASE_DIR / "reviews_log.json"
 
 def save_reviews_log(new_reviews: list):
     """새 리뷰를 reviews_log.json에 누적 저장 (최근 180일치 유지)"""
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(KST).strftime("%Y-%m-%d")
     log = []
     if REVIEWS_LOG_FILE.exists():
         with open(REVIEWS_LOG_FILE) as f:
@@ -487,7 +489,7 @@ def send_discord(webhook_url: str, new_reviews: list):
     if not new_reviews:
         return
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(KST).strftime("%Y-%m-%d")
 
     # 책별 집계
     from collections import defaultdict
