@@ -502,7 +502,7 @@ def save_reviews_log(new_reviews: list):
 
 
 def send_discord(webhook_url: str, new_reviews: list):
-    """하루치 요약 1개 + 대시보드 링크 발송"""
+    """하루치 요약 1개 + 리뷰 본문 + 대시보드 링크 발송"""
     if not webhook_url:
         print("[Discord] config.json에 discord_webhook URL이 없습니다.")
         return
@@ -511,23 +511,44 @@ def send_discord(webhook_url: str, new_reviews: list):
 
     today = datetime.now(KST).strftime("%Y-%m-%d")
 
-    # 책별 집계
+    # 책별 그룹
     from collections import defaultdict
-    by_book: dict = defaultdict(lambda: defaultdict(int))
+    by_book: dict = defaultdict(list)
     for rv in new_reviews:
-        by_book[rv["title"]][rv["store"]] += 1
+        by_book[rv["title"]].append(rv)
 
-    # 책별 요약 텍스트
-    lines = []
-    for title, stores in sorted(by_book.items(), key=lambda x: -sum(x[1].values())):
-        total = sum(stores.values())
-        store_detail = "  ".join(
-            f"{STORE_EMOJI[s]} {STORE_NAMES[s]} {n}개"
-            for s, n in stores.items() if s in STORE_EMOJI
-        )
-        lines.append(f"**{title[:30]}** — {total}개\n{store_detail}")
+    # 책별 요약 + 리뷰 본문 (embed description 한도 4096자 내에서 리뷰 단위로 자름)
+    MAX_DESC = 3800
+    parts = []
+    used = 0
+    shown = 0
+    truncated = False
+    for title, rvs in sorted(by_book.items(), key=lambda x: -len(x[1])):
+        header = f"\n**{title[:30]}** — {len(rvs)}개" if parts else f"**{title[:30]}** — {len(rvs)}개"
+        if used + len(header) > MAX_DESC:
+            truncated = True
+            break
+        parts.append(header)
+        used += len(header)
+        for rv in rvs:
+            emoji = STORE_EMOJI.get(rv.get("store", ""), "▪️")
+            meta = " · ".join(x for x in (rv.get("rating", ""), rv.get("date", ""), rv.get("reviewer", "")) if x)
+            text = rv.get("text", "").strip()
+            if len(text) > 150:
+                text = text[:150] + "…"
+            chunk = f"{emoji} {meta}".rstrip() + f"\n> {text} [↗]({rv.get('link', DASHBOARD_URL)})"
+            if used + len(chunk) > MAX_DESC:
+                truncated = True
+                break
+            parts.append(chunk)
+            used += len(chunk)
+            shown += 1
+        if truncated:
+            break
+    if truncated:
+        parts.append(f"…외 {len(new_reviews) - shown}개는 대시보드에서 확인하세요.")
 
-    description = "\n\n".join(lines)
+    description = "\n".join(parts)
     total_count = len(new_reviews)
 
     embed = {
