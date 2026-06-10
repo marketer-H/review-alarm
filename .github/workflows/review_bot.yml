@@ -2,7 +2,7 @@ name: 구매평 알림봇
 
 on:
   schedule:
-    - cron: '0 5 * * *'   # 매일 오전 5시 UTC = 한국 오후 2시
+    - cron: '0 0 * * *'   # 매일 0시 UTC = 한국 오전 9시
   workflow_dispatch:       # GitHub에서 수동 실행 버튼
 
 jobs:
