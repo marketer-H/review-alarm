@@ -110,6 +110,14 @@ def clean_text(raw: str) -> str:
     text = re.sub(r"이\s*글에는\s*스포일러가\s*포함되어\s*있습니다\.\s*보시겠습니까\?", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
+def normalize_date(raw: str) -> str:
+    """'2026-06-05', '2026.06.05', '2026/6/5' 등을 YYYY-MM-DD로. 실패 시 빈 문자열."""
+    m = re.search(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})", raw or "")
+    if not m:
+        return ""
+    y, mo, d = m.groups()
+    return f"{y}-{int(mo):02d}-{int(d):02d}"
+
 
 # ─── 알라딘 ──────────────────────────────────────────────────────────
 def get_aladin_reviews(isbn: str, cache: dict) -> list:
@@ -197,6 +205,10 @@ def _parse_aladin_comment_reviews(html: str, title: str, item_id: str) -> list:
             reviewer_m = re.search(r'<a[^>]+class="lnk_id"[^>]*>([^<]+)</a>', block)
         reviewer = reviewer_m.group(1).strip() if reviewer_m else "익명"
 
+        # 작성일 (Ere_sub_gray8 스팬)
+        date_m = re.search(r'Ere_sub_gray8[^>]*>\s*(\d{4}[-./]\d{1,2}[-./]\d{1,2})', block)
+        posted = normalize_date(date_m.group(1)) if date_m else ""
+
         # 리뷰 텍스트
         text_m = re.search(
             rf'id="div_commentReviewPaper{rv_id}"[^>]*>(.*?)</div>',
@@ -212,6 +224,7 @@ def _parse_aladin_comment_reviews(html: str, title: str, item_id: str) -> list:
                 "id": rv_id,
                 "reviewer": reviewer,
                 "rating": str(stars),
+                "date": posted,
                 "text": text,
                 "title": title,
                 "link": f"https://www.aladin.co.kr/shop/wproduct.aspx?ItemId={item_id}#coReview",
@@ -242,6 +255,10 @@ def _parse_aladin_my_reviews(html: str, title: str, item_id: str) -> list:
         reviewer_m = re.search(r'blog\.aladin\.co\.kr/(\d+)/', block)
         reviewer = reviewer_m.group(1) if reviewer_m else "익명"
 
+        # 작성일 (Ere_sub_gray8 스팬)
+        date_m = re.search(r'Ere_sub_gray8[^>]*>\s*(\d{4}[-./]\d{1,2}[-./]\d{1,2})', block)
+        posted = normalize_date(date_m.group(1)) if date_m else ""
+
         # 본문 (paperShort_{id})
         text_m = re.search(rf'id="paperShort_{rv_id}"[^>]*>(.*?)</div>', block, re.DOTALL)
         text = clean_text(text_m.group(1)) if text_m else rv_title
@@ -251,6 +268,7 @@ def _parse_aladin_my_reviews(html: str, title: str, item_id: str) -> list:
                 "id": f"M{rv_id}",  # CommentReview ID와 구분
                 "reviewer": reviewer,
                 "rating": str(stars),
+                "date": posted,
                 "text": f"[일반 리뷰] {rv_title}\n{text}" if rv_title and rv_title not in text else text,
                 "title": title,
                 "link": f"https://www.aladin.co.kr/shop/wproduct.aspx?ItemId={item_id}#myReview",
@@ -388,6 +406,7 @@ def _parse_yes24_reviews(html: str, title: str, pid: str) -> list:
                 "id": rv_id,
                 "reviewer": reviewer,
                 "rating": f"{int(rating)//2}점/5점" if rating else "",
+                "date": normalize_date(date_str),
                 "text": text,
                 "title": title,
                 "link": f"https://www.yes24.com/Product/Goods/{pid}#review",
@@ -452,11 +471,12 @@ def get_kyobo_review_count(isbn: str, cache: dict) -> tuple:
 
 
 # ─── Discord 발송 ─────────────────────────────────────────────────────
-DASHBOARD_URL = "https://marketer-h.github.io/review-alarm/dashboard.html"
+DASHBOARD_URL = "https://marketer-h.github.io/review-alarm/"
 REVIEWS_LOG_FILE = BASE_DIR / "reviews_log.json"
 
 def save_reviews_log(new_reviews: list):
-    """새 리뷰를 reviews_log.json에 누적 저장 (최근 180일치 유지)"""
+    """새 리뷰를 reviews_log.json에 누적 저장 (최근 180일치 유지)
+    date는 리뷰 작성일 기준. 작성일을 못 구한 경우(교보 등)만 감지일로 대체."""
     today = datetime.now(KST).strftime("%Y-%m-%d")
     log = []
     if REVIEWS_LOG_FILE.exists():
@@ -464,7 +484,7 @@ def save_reviews_log(new_reviews: list):
             log = json.load(f)
     for rv in new_reviews:
         log.append({
-            "date":     today,
+            "date":     rv.get("date") or today,
             "isbn":     rv.get("isbn", ""),
             "title":    rv.get("title", ""),
             "store":    rv.get("store", ""),

@@ -190,7 +190,7 @@ async function load() {
     dates.forEach(d => { const o = document.createElement('option'); o.value=o.textContent=d; sel.appendChild(o); });
 
     document.getElementById('last-updated').textContent =
-      `마지막 업데이트: ${dates[0]||'-'} | 총 ${allReviews.length}개`;
+      `리뷰 작성일 기준 · 최신 리뷰: ${dates[0]||'-'} | 총 ${allReviews.length}개`;
     render(allReviews);
   } catch(e) {
     document.getElementById('main').innerHTML =
