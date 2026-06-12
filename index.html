@@ -6,15 +6,19 @@
 <title>이지스퍼블리싱 서점 리뷰 대시보드</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; color: #1e293b; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f1f5f9; color: #1e293b;
+  font-size: 15px; word-break: keep-all;
+}
 
 header {
   background: linear-gradient(135deg, #0f2744, #1e3a5f);
   color: #fff; padding: 20px 32px;
   display: flex; align-items: center; justify-content: space-between;
 }
-header h1 { font-size: 18px; font-weight: 700; }
-header span { font-size: 12px; color: #93c5fd; }
+header h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+header span { font-size: 13px; color: #93c5fd; }
 
 .toolbar {
   display: flex; gap: 12px; align-items: center;
@@ -22,64 +26,168 @@ header span { font-size: 12px; color: #93c5fd; }
   flex-wrap: wrap;
 }
 .toolbar input, .toolbar select {
-  padding: 7px 12px; border: 1px solid #e2e8f0; border-radius: 8px;
-  font-size: 13px; outline: none; background: #f8fafc;
+  padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+  font-size: 14px; outline: none; background: #f8fafc; color: #1e293b;
 }
-.toolbar input { width: 220px; }
+.toolbar input:focus, .toolbar select:focus { border-color: #3b82f6; background: #fff; }
+.toolbar input { width: 240px; }
+.date-picker { position: relative; }
+#date-btn {
+  padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+  font-size: 14px; background: #f8fafc; color: #1e293b; cursor: pointer;
+}
+#date-btn:hover { border-color: #3b82f6; }
+.calendar {
+  display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  width: 300px; padding: 14px; background: #fff;
+  border: 1px solid #e2e8f0; border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .12);
+}
+.calendar.open { display: block; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cal-title { font-size: 14px; font-weight: 700; }
+.cal-nav {
+  width: 28px; height: 28px; border: none; border-radius: 6px;
+  background: #f1f5f9; color: #475569; font-size: 12px; cursor: pointer;
+}
+.cal-nav:hover:not(:disabled) { background: #e2e8f0; }
+.cal-nav:disabled { opacity: .35; cursor: default; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-dow { text-align: center; font-size: 11px; font-weight: 600; color: #64748b; padding: 4px 0; }
+.cal-dow.sun { color: #dc2626; }
+.cal-dow.sat { color: #2563eb; }
+.cal-day {
+  position: relative; height: 36px; border: none; border-radius: 8px;
+  background: none; font-size: 13px; color: #cbd5e1;
+}
+.cal-day.has { background: #eff6ff; color: #1e293b; font-weight: 700; cursor: pointer; }
+.cal-day.has:hover { background: #dbeafe; }
+.cal-day.has::after {
+  content: ''; position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%);
+  width: 4px; height: 4px; border-radius: 50%; background: #3b82f6;
+}
+.cal-day.selected, .cal-day.selected:hover { background: #2563eb; color: #fff; }
+.cal-day.selected::after { background: #fff; }
+.cal-day.today { box-shadow: inset 0 0 0 1.5px #3b82f6; }
+#cal-clear {
+  width: 100%; margin-top: 10px; padding: 8px; border: none; border-radius: 8px;
+  background: #f1f5f9; color: #475569; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+#cal-clear:hover:not(:disabled) { background: #e2e8f0; }
+#cal-clear:disabled { opacity: .5; cursor: default; }
+#reset-filters {
+  display: none; padding: 9px 14px; border: none; border-radius: 8px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  background: #eff6ff; color: #2563eb;
+}
+#reset-filters:hover { background: #dbeafe; }
 .count-badge {
-  margin-left: auto; font-size: 13px; color: #64748b;
-  background: #f1f5f9; padding: 6px 14px; border-radius: 20px;
+  margin-left: auto; font-size: 14px; font-weight: 600; color: #475569;
+  background: #f1f5f9; padding: 7px 14px; border-radius: 20px;
 }
 
 .main { max-width: 1100px; margin: 24px auto; padding: 0 24px; }
 
-.date-group { margin-bottom: 32px; }
+/* 상단 요약 카드 */
+.stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  margin-bottom: 28px;
+}
+.stat-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+  padding: 16px 18px;
+}
+.stat-card .stat-label { font-size: 13px; color: #64748b; margin-bottom: 6px; }
+.stat-card .stat-value { font-size: 26px; font-weight: 700; color: #0f2744; }
+.stat-card .stat-sub { font-size: 12px; color: #64748b; margin-top: 4px; }
+.stat-card.alert .stat-value { color: #dc2626; }
+.stat-card.alert { border-color: #fecaca; background: #fff8f8; }
+
+.date-group { margin-bottom: 36px; }
 .date-label {
-  font-size: 13px; font-weight: 700; color: #64748b;
-  text-transform: uppercase; letter-spacing: .5px;
+  font-size: 15px; font-weight: 700; color: #334155;
   margin-bottom: 12px; padding-bottom: 8px;
   border-bottom: 2px solid #e2e8f0;
   display: flex; align-items: center; gap: 8px;
 }
+.date-label.today { color: #1d4ed8; border-bottom-color: #bfdbfe; }
 .date-label .day-count {
   background: #3b82f6; color: #fff;
-  font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+  font-size: 12px; padding: 2px 9px; border-radius: 10px; font-weight: 600;
+}
+.new-badge {
+  background: #dc2626; color: #fff; font-size: 11px; font-weight: 700;
+  padding: 2px 7px; border-radius: 6px; letter-spacing: .5px;
 }
 
 .book-group { margin-bottom: 16px; }
 .book-title {
-  font-size: 14px; font-weight: 700; color: #1e293b;
-  padding: 10px 16px; background: #fff; border-radius: 10px 10px 0 0;
+  font-size: 15px; font-weight: 700; color: #1e293b;
+  padding: 12px 16px; background: #fff; border-radius: 10px 10px 0 0;
   border: 1px solid #e2e8f0; border-bottom: none;
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
 .book-title a { color: inherit; text-decoration: none; }
 .book-title a:hover { text-decoration: underline; }
+.book-title .book-count { font-size: 12px; color: #64748b; font-weight: 500; }
 
 .review-list { border: 1px solid #e2e8f0; border-radius: 0 0 10px 10px; overflow: hidden; }
 .review-item {
-  padding: 14px 16px; background: #fff; border-bottom: 1px solid #f1f5f9;
-  display: grid; grid-template-columns: 80px 1fr; gap: 12px;
+  padding: 16px; background: #fff; border-bottom: 1px solid #f1f5f9;
+  display: grid; grid-template-columns: 96px 1fr; gap: 14px;
 }
 .review-item:last-child { border-bottom: none; }
 .review-item:hover { background: #fafbfc; }
-
-.review-meta { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
-.store-badge {
-  font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+.review-item.low-rating {
+  border-left: 4px solid #ef4444; background: #fffafa;
+  padding-left: 12px;
 }
-.store-badge.aladin  { background: #fef2f2; color: #ef4128; }
-.store-badge.yes24   { background: #fff7ed; color: #f97316; }
-.store-badge.kyobo   { background: #f0fdf4; color: #009261; }
-.review-rating { font-size: 12px; color: #f59e0b; }
-.review-reviewer { font-size: 11px; color: #94a3b8; }
+.review-item.low-rating:hover { background: #fef5f5; }
 
-.review-body { display: flex; flex-direction: column; gap: 4px; }
-.review-text { font-size: 13px; line-height: 1.6; color: #374151; }
-.review-date { font-size: 11px; color: #94a3b8; }
+.review-meta { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+.store-badge {
+  font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 6px;
+}
+.store-badge.aladin  { background: #fee2e2; color: #dc2626; }
+.store-badge.yes24   { background: #ffedd5; color: #c2410c; }
+.store-badge.kyobo   { background: #dcfce7; color: #15803d; }
+.review-rating { font-size: 13px; font-weight: 600; color: #b45309; }
+.review-rating.low { color: #dc2626; }
+.review-reviewer { font-size: 12px; color: #64748b; }
 
-.empty { text-align: center; padding: 60px; color: #94a3b8; font-size: 14px; }
-.loading { text-align: center; padding: 80px; color: #64748b; }
+.review-text { font-size: 15px; line-height: 1.7; color: #334155; }
+
+.empty { text-align: center; padding: 60px 20px; color: #64748b; font-size: 15px; line-height: 1.8; }
+.empty button {
+  margin-top: 12px; padding: 9px 18px; border: none; border-radius: 8px;
+  background: #3b82f6; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+
+.loading { text-align: center; padding: 80px 20px; color: #64748b; font-size: 15px; }
+.spinner {
+  width: 32px; height: 32px; margin: 0 auto 16px;
+  border: 3px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 모바일 */
+@media (max-width: 640px) {
+  header { padding: 16px 20px; }
+  header h1 { font-size: 17px; }
+  .toolbar { padding: 12px 16px; gap: 8px; }
+  .toolbar input { width: 100%; }
+  .toolbar select, .date-picker { flex: 1; min-width: 0; }
+  #date-btn { width: 100%; }
+  .calendar { left: auto; right: 0; }
+  .count-badge { margin-left: 0; }
+  .main { padding: 0 12px; margin: 16px auto; }
+  .stats { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stat-card { padding: 12px 14px; }
+  .stat-card .stat-value { font-size: 22px; }
+  .review-item { grid-template-columns: 1fr; gap: 10px; }
+  .review-meta { flex-direction: row; align-items: center; gap: 10px; flex-wrap: wrap; }
+}
 </style>
 </head>
 <body>
@@ -99,32 +207,145 @@ header span { font-size: 12px; color: #93c5fd; }
     <option value="yes24">예스24</option>
     <option value="kyobo">교보문고</option>
   </select>
-  <select id="date-filter">
-    <option value="">전체 날짜</option>
-  </select>
+  <div class="date-picker">
+    <button id="date-btn">📅 전체 날짜</button>
+    <div class="calendar" id="calendar"></div>
+  </div>
+  <button id="reset-filters">필터 초기화</button>
   <span class="count-badge" id="count-badge">0개</span>
 </div>
 
-<div class="main" id="main">
-  <div class="loading">리뷰 데이터를 불러오는 중...</div>
+<div class="main">
+  <div class="stats" id="stats" style="display:none"></div>
+  <div id="content">
+    <div class="loading"><div class="spinner"></div>리뷰 데이터를 불러오는 중...</div>
+  </div>
 </div>
 
 <script>
 let allReviews = [];
 
 const storeLabel = s => ({ aladin:'알라딘', yes24:'예스24', kyobo:'교보문고' }[s] || s);
+const DAYS = ['일','월','화','수','목','금','토'];
 
-function stars(rating) {
-  const n = parseInt(rating);
-  if (!n) return '';
-  return '⭐'.repeat(Math.min(n, 5)) + ` ${n}`;
+function toISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+const TODAY = toISO(new Date());
+const YESTERDAY = toISO(new Date(Date.now() - 86400000));
+
+function formatDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return iso;
+  const base = `${m}월 ${d}일 (${DAYS[new Date(y, m-1, d).getDay()]})`;
+  if (iso === TODAY) return `오늘 · ${base}`;
+  if (iso === YESTERDAY) return `어제 · ${base}`;
+  return base;
+}
+
+// ── 캘린더 날짜 필터 ──
+let selectedDate = '';
+let dateCounts = {};                      // 'YYYY-MM-DD' → 리뷰 수
+let calY, calM;                           // 캘린더에 표시 중인 연/월
+let minYM = TODAY.slice(0, 7), maxYM = TODAY.slice(0, 7);
+
+function openMonthOf(iso) {
+  const [y, m] = iso.split('-').map(Number);
+  calY = y; calM = m - 1;
+}
+openMonthOf(TODAY);
+
+function updateDateBtn() {
+  document.getElementById('date-btn').textContent =
+    `📅 ${selectedDate ? formatDate(selectedDate) : '전체 날짜'}`;
+}
+
+function buildCalendar() {
+  const cur = `${calY}-${String(calM + 1).padStart(2, '0')}`;
+  const startDow = new Date(calY, calM, 1).getDay();
+  const lastDay = new Date(calY, calM + 1, 0).getDate();
+
+  let html = `<div class="cal-head">
+    <button class="cal-nav" data-nav="-1" ${cur <= minYM ? 'disabled' : ''}>◀</button>
+    <span class="cal-title">${calY}년 ${calM + 1}월</span>
+    <button class="cal-nav" data-nav="1" ${cur >= maxYM ? 'disabled' : ''}>▶</button>
+  </div><div class="cal-grid">`;
+  DAYS.forEach((d, i) =>
+    html += `<span class="cal-dow${i === 0 ? ' sun' : i === 6 ? ' sat' : ''}">${d}</span>`);
+  for (let i = 0; i < startDow; i++) html += '<span></span>';
+  for (let d = 1; d <= lastDay; d++) {
+    const iso = `${cur}-${String(d).padStart(2, '0')}`;
+    const count = dateCounts[iso] || 0;
+    const cls = 'cal-day' + (count ? ' has' : '')
+      + (iso === selectedDate ? ' selected' : '') + (iso === TODAY ? ' today' : '');
+    html += count
+      ? `<button class="${cls}" data-date="${iso}" title="리뷰 ${count}개">${d}</button>`
+      : `<button class="${cls}" disabled>${d}</button>`;
+  }
+  html += `</div><button id="cal-clear" ${selectedDate ? '' : 'disabled'}>전체 날짜 보기</button>`;
+  document.getElementById('calendar').innerHTML = html;
+}
+
+function closeCalendar() {
+  document.getElementById('calendar').classList.remove('open');
+}
+
+// 서점마다 별점 형식이 다름: '10'(10점 만점), '5점/5점' 등 → 5점 만점으로 환산
+function parseRating(raw) {
+  if (!raw) return null;
+  const m = String(raw).match(/(\d+(?:\.\d+)?)\s*점?\s*(?:\/\s*(\d+(?:\.\d+)?)\s*점?)?/);
+  if (!m) return null;
+  const n = parseFloat(m[1]);
+  const max = m[2] ? parseFloat(m[2]) : (n > 5 ? 10 : 5);
+  if (!max || n > max) return null;
+  return Math.round((n / max) * 5 * 10) / 10;
+}
+
+function ratingBadge(rating) {
+  const n = parseRating(rating);
+  if (n === null) return '';
+  const low = n <= 2 ? ' low' : '';
+  return `<span class="review-rating${low}">⭐ ${n}점</span>`;
+}
+
+function renderStats() {
+  const todayCount = allReviews.filter(r => r.date === TODAY).length;
+  const weekAgo = toISO(new Date(Date.now() - 7 * 86400000));
+  const weekCount = allReviews.filter(r => r.date >= weekAgo).length;
+  const rated = allReviews.map(r => parseRating(r.rating)).filter(n => n !== null);
+  const avg = rated.length ? (rated.reduce((s,n)=>s+n,0) / rated.length).toFixed(1) : '-';
+  const lowCount = rated.filter(n => n <= 2).length;
+
+  const stats = document.getElementById('stats');
+  stats.style.display = '';
+  stats.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">오늘 새 리뷰</div>
+      <div class="stat-value">${todayCount}개</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">최근 7일</div>
+      <div class="stat-value">${weekCount}개</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">평균 별점</div>
+      <div class="stat-value">${avg === '-' ? '-' : '⭐ ' + avg}</div>
+      <div class="stat-sub">전체 ${allReviews.length}개 기준</div>
+    </div>
+    <div class="stat-card${lowCount ? ' alert' : ''}">
+      <div class="stat-label">낮은 별점 (1~2점)</div>
+      <div class="stat-value">${lowCount}개</div>
+      ${lowCount ? '<div class="stat-sub">확인이 필요해요</div>' : ''}
+    </div>`;
 }
 
 function render(reviews) {
-  const main = document.getElementById('main');
+  const content = document.getElementById('content');
   document.getElementById('count-badge').textContent = `${reviews.length}개`;
   if (!reviews.length) {
-    main.innerHTML = '<div class="empty">조건에 맞는 리뷰가 없습니다.</div>';
+    content.innerHTML = `<div class="empty">조건에 맞는 리뷰가 없습니다.<br>
+      검색어나 필터를 바꿔서 다시 찾아보세요.<br>
+      <button onclick="resetFilters()">필터 초기화</button></div>`;
     return;
   }
 
@@ -137,47 +358,61 @@ function render(reviews) {
   let html = '';
   Object.keys(byDate).sort((a,b)=>b.localeCompare(a)).forEach(date => {
     const dayCount = Object.values(byDate[date]).reduce((s,a)=>s+a.length,0);
+    const isToday = date === TODAY;
     html += `<div class="date-group">
-      <div class="date-label">${date} <span class="day-count">${dayCount}개</span></div>`;
+      <div class="date-label${isToday ? ' today' : ''}">
+        ${formatDate(date)}
+        <span class="day-count">${dayCount}개</span>
+        ${isToday ? '<span class="new-badge">NEW</span>' : ''}
+      </div>`;
 
     Object.entries(byDate[date]).sort((a,b)=>b[1].length-a[1].length).forEach(([title, rvs]) => {
       const link = rvs.find(r=>r.link)?.link || '#';
       html += `<div class="book-group">
         <div class="book-title">
           <a href="${link}" target="_blank">${title}</a>
-          <span style="font-size:11px;color:#94a3b8;font-weight:400">× ${rvs.length}</span>
+          <span class="book-count">리뷰 ${rvs.length}개</span>
         </div>
         <div class="review-list">`;
 
       rvs.forEach(rv => {
-        html += `<div class="review-item">
+        const n = parseRating(rv.rating);
+        const low = n !== null && n <= 2;
+        html += `<div class="review-item${low ? ' low-rating' : ''}">
           <div class="review-meta">
             <span class="store-badge ${rv.store}">${storeLabel(rv.store)}</span>
-            ${rv.rating ? `<span class="review-rating">${stars(rv.rating)}</span>` : ''}
+            ${ratingBadge(rv.rating)}
             <span class="review-reviewer">${rv.reviewer||''}</span>
           </div>
-          <div class="review-body">
-            <div class="review-text">${rv.text||'(내용 없음)'}</div>
-            <div class="review-date">${rv.date}</div>
-          </div>
+          <div class="review-text">${rv.text||'(내용 없음)'}</div>
         </div>`;
       });
       html += `</div></div>`;
     });
     html += `</div>`;
   });
-  main.innerHTML = html;
+  content.innerHTML = html;
 }
 
 function applyFilters() {
   const q = document.getElementById('search').value.toLowerCase();
   const store = document.getElementById('store-filter').value;
-  const dateVal = document.getElementById('date-filter').value;
+  const dateVal = selectedDate;
+  document.getElementById('reset-filters').style.display =
+    (q || store || dateVal) ? '' : 'none';
   render(allReviews.filter(r =>
     (!store || r.store === store) &&
     (!dateVal || r.date === dateVal) &&
     (!q || r.title.toLowerCase().includes(q) || (r.text||'').toLowerCase().includes(q))
   ));
+}
+
+function resetFilters() {
+  document.getElementById('search').value = '';
+  document.getElementById('store-filter').value = '';
+  selectedDate = '';
+  updateDateBtn();
+  applyFilters();
 }
 
 async function load() {
@@ -186,21 +421,67 @@ async function load() {
     allReviews = (await res.json()).sort((a,b)=>b.date.localeCompare(a.date));
 
     const dates = [...new Set(allReviews.map(r=>r.date))].sort((a,b)=>b.localeCompare(a));
-    const sel = document.getElementById('date-filter');
-    dates.forEach(d => { const o = document.createElement('option'); o.value=o.textContent=d; sel.appendChild(o); });
+    dateCounts = {};
+    allReviews.forEach(r => dateCounts[r.date] = (dateCounts[r.date] || 0) + 1);
+    if (dates.length) {
+      minYM = dates[dates.length - 1].slice(0, 7);
+      maxYM = dates[0].slice(0, 7) > TODAY.slice(0, 7) ? dates[0].slice(0, 7) : TODAY.slice(0, 7);
+      openMonthOf(dates[0]);
+    }
 
     document.getElementById('last-updated').textContent =
-      `리뷰 작성일 기준 · 최신 리뷰: ${dates[0]||'-'} | 총 ${allReviews.length}개`;
+      `리뷰 작성일 기준 · 최신 리뷰: ${dates[0] ? formatDate(dates[0]) : '-'} | 총 ${allReviews.length}개`;
+    renderStats();
     render(allReviews);
   } catch(e) {
-    document.getElementById('main').innerHTML =
-      '<div class="empty">reviews_log.json을 불러올 수 없습니다.<br>봇이 아직 실행 전이거나 GitHub Pages 설정이 필요합니다.</div>';
+    document.getElementById('content').innerHTML =
+      `<div class="empty">아직 표시할 리뷰 데이터가 없습니다.<br>
+      리뷰 수집이 한 번 실행된 뒤에 데이터가 나타나요. 잠시 후 새로고침해 주세요.</div>`;
   }
 }
 
 document.getElementById('search').addEventListener('input', applyFilters);
 document.getElementById('store-filter').addEventListener('change', applyFilters);
-document.getElementById('date-filter').addEventListener('change', applyFilters);
+document.getElementById('reset-filters').addEventListener('click', resetFilters);
+
+document.getElementById('date-btn').addEventListener('click', () => {
+  const cal = document.getElementById('calendar');
+  const opening = !cal.classList.contains('open');
+  if (opening) {
+    if (selectedDate) openMonthOf(selectedDate);
+    buildCalendar();
+  }
+  cal.classList.toggle('open', opening);
+});
+
+document.getElementById('calendar').addEventListener('click', e => {
+  const nav = e.target.closest('.cal-nav');
+  if (nav && !nav.disabled) {
+    calM += parseInt(nav.dataset.nav);
+    if (calM < 0) { calM = 11; calY--; }
+    if (calM > 11) { calM = 0; calY++; }
+    buildCalendar();
+    return;
+  }
+  const day = e.target.closest('.cal-day[data-date]');
+  if (day) {
+    selectedDate = day.dataset.date === selectedDate ? '' : day.dataset.date;
+    updateDateBtn();
+    closeCalendar();
+    applyFilters();
+    return;
+  }
+  if (e.target.id === 'cal-clear' && selectedDate) {
+    selectedDate = '';
+    updateDateBtn();
+    closeCalendar();
+    applyFilters();
+  }
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.date-picker')) closeCalendar();
+});
 load();
 </script>
 </body>
