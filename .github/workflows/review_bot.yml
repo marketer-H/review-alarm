@@ -26,7 +26,7 @@ jobs:
       - name: config.json 생성
         run: |
           echo '{
-            "discord_webhook": "${{ secrets.DISCORD_WEBHOOK }}",
+            "discord_webhook": "${{ secrets.DISCORD_WEBHOOK }},${{ secrets.DISCORD_WEBHOOK_2 }}",
             "stores": ["aladin", "yes24", "kyobo"]
           }' > config.json
 

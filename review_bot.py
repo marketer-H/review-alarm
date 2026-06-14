@@ -502,7 +502,7 @@ def save_reviews_log(new_reviews: list):
 
 
 def send_discord(webhook_url: str, new_reviews: list):
-    """하루치 요약 1개 + 리뷰 본문 + 대시보드 링크 발송"""
+    """하루치 요약 1개 + 리뷰 본문 + 대시보드 링크 발송. webhook_url은 쉼표 구분 다중 URL 허용."""
     if not webhook_url:
         print("[Discord] config.json에 discord_webhook URL이 없습니다.")
         return
@@ -560,14 +560,16 @@ def send_discord(webhook_url: str, new_reviews: list):
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
 
-    try:
-        r = requests.post(webhook_url, json={"embeds": [embed]}, timeout=10)
-        if r.status_code not in (200, 204):
-            print(f"[Discord] 발송 실패: HTTP {r.status_code}")
-        else:
-            print(f"[Discord] 서점 리뷰 요약 알림 발송 완료 ({total_count}개)")
-    except Exception as e:
-        print(f"[Discord] 오류: {e}")
+    urls = [u.strip() for u in webhook_url.split(",") if u.strip()]
+    for url in urls:
+        try:
+            r = requests.post(url, json={"embeds": [embed]}, timeout=10)
+            if r.status_code not in (200, 204):
+                print(f"[Discord] 발송 실패: HTTP {r.status_code} ({url[:60]}…)")
+            else:
+                print(f"[Discord] 발송 완료 ({total_count}개) → {url[:60]}…")
+        except Exception as e:
+            print(f"[Discord] 오류: {e}")
 
 
 # ─── 메인 ────────────────────────────────────────────────────────────
