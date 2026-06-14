@@ -436,38 +436,76 @@ def _kyobo_product_id(isbn: str, cache: dict) -> str | None:
     return None
 
 
-def get_kyobo_review_count(isbn: str, cache: dict) -> tuple:
-    """(product_id, review_count, title) 반환. 리뷰 목록 API 불가 → count 기반 감지."""
+def _kyobo_title(isbn: str, product_id: str, cache: dict) -> str:
+    title_key = f"_title_{isbn}"
+    if cache.get(title_key):
+        return cache[title_key]
+    try:
+        rp = requests.get(
+            f"https://product.kyobobook.co.kr/detail/{product_id}",
+            headers=HTML_HEADERS, timeout=15,
+        )
+        m = re.search(r'<meta[^>]+property="og:title"[^>]+content="([^"]+)"', rp.text)
+        title = m.group(1).strip() if m else isbn
+        cache[title_key] = title
+        return title
+    except Exception:
+        return isbn
+
+
+def get_kyobo_reviews(isbn: str, cache: dict) -> tuple:
+    """(product_id, reviews, title) 반환. Playwright로 리뷰 목록 API 응답을 캡처."""
     product_id = _kyobo_product_id(isbn, cache)
     if not product_id:
-        return None, 0, isbn
+        return None, [], isbn
 
-    title_key = f"_title_{isbn}"
-    title = cache.get(title_key, "")
-    if not title:
-        try:
-            rp = requests.get(
-                f"https://product.kyobobook.co.kr/detail/{product_id}",
-                headers=HTML_HEADERS, timeout=15,
-            )
-            tm = re.search(r'<meta[^>]+property="og:title"[^>]+content="([^"]+)"', rp.text)
-            title = tm.group(1).strip() if tm else isbn
-            cache[title_key] = title
-        except Exception:
-            title = isbn
+    title = _kyobo_title(isbn, product_id, cache)
+    reviews = []
 
     try:
-        r = requests.get(
-            f"https://product.kyobobook.co.kr/api/review/statistics?saleCmdtid={product_id}",
-            headers={**JSON_HEADERS, "Referer": f"https://product.kyobobook.co.kr/detail/{product_id}"},
-            timeout=15,
-        )
-        data = r.json().get("data") or {}
-        count = int(data.get("whlRevwCont") or 0)
-        return product_id, count, title
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            )
+
+            captured = []
+            def on_response(resp):
+                if "api/review/list" in resp.url and "saleCmdtids" in resp.url:
+                    try:
+                        captured.append(resp.json())
+                    except Exception:
+                        pass
+            page.on("response", on_response)
+
+            page.goto(f"https://product.kyobobook.co.kr/detail/{product_id}",
+                      wait_until="networkidle", timeout=30000)
+            page.wait_for_timeout(2000)
+            browser.close()
+
+        for data in captured:
+            for rv in (data.get("data") or {}).get("reviewList") or []:
+                rv_id = str(rv.get("revwNum", ""))
+                text = (rv.get("revwCntt") or "").strip()
+                rating = rv.get("revwRvgr") or ""
+                reviewer = rv.get("mmbrId") or ""
+                date_raw = rv.get("cretDttm") or ""
+                date = date_raw[:10] if date_raw else ""
+                if rv_id and text:
+                    reviews.append({
+                        "id": rv_id,
+                        "text": text,
+                        "rating": str(rating),
+                        "reviewer": reviewer,
+                        "date": date,
+                        "title": title,
+                        "link": f"https://product.kyobobook.co.kr/detail/{product_id}",
+                    })
     except Exception as e:
         print(f"    [교보 오류] {isbn}: {e}")
-        return product_id, 0, title
+
+    return product_id, reviews, title
 
 
 # ─── Discord 발송 ─────────────────────────────────────────────────────
@@ -646,22 +684,16 @@ def main():
             state[isbn]["yes24"] = all_ids[-300:]
 
         if "kyobo" in stores:
-            prev_count = state[isbn].get("kyobo_count", -1)
-            product_id, curr_count, title = get_kyobo_review_count(isbn, cache)
-            if curr_count > 0:
-                state[isbn]["kyobo_count"] = curr_count
-                if prev_count >= 0 and curr_count > prev_count:
-                    diff = curr_count - prev_count
-                    found.append({
-                        "store": "kyobo",
-                        "isbn": isbn,
-                        "id": f"kyobo_{isbn}_{curr_count}",
-                        "reviewer": "",
-                        "rating": "",
-                        "text": f"구매평 {diff}개 새로 등록 (총 {curr_count}개)",
-                        "title": title,
-                        "link": f"https://product.kyobobook.co.kr/detail/{product_id}",
-                    })
+            seen = set(state[isbn].get("kyobo", []))
+            product_id, reviews, _ = get_kyobo_reviews(isbn, cache)
+            new = [rv for rv in reviews if rv["id"] not in seen]
+            if new:
+                for rv in new:
+                    rv["store"] = "kyobo"
+                    rv["isbn"] = isbn
+                found.extend(new)
+            all_ids = list(seen | {rv["id"] for rv in reviews})
+            state[isbn]["kyobo"] = all_ids[-300:]
 
         if found:
             book_title = next((rv["title"] for rv in found if rv.get("title")), isbn)
