@@ -446,9 +446,11 @@ def _kyobo_title(isbn: str, product_id: str, cache: dict) -> str:
             headers=HTML_HEADERS, timeout=15,
         )
         m = re.search(r'<meta[^>]+property="og:title"[^>]+content="([^"]+)"', rp.text)
-        title = m.group(1).strip() if m else isbn
-        cache[title_key] = title
-        return title
+        if m:
+            title = m.group(1).strip()
+            cache[title_key] = title
+            return title
+        return isbn  # 조회 실패 시 캐시 안 함 → 다음 실행 때 재시도
     except Exception:
         return isbn
 
