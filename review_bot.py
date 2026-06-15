@@ -610,6 +610,33 @@ def send_discord(webhook_url: str, new_reviews: list):
             print(f"[Discord] 오류: {e}")
 
 
+def send_discord_no_reviews(webhook_url: str):
+    """새 리뷰가 없는 날 보내는 짧은 하트비트 메시지. 봇이 살아있음을 알려준다."""
+    if not webhook_url:
+        return
+
+    today = datetime.now(KST).strftime("%Y-%m-%d")
+    embed = {
+        "title": "✅ 오늘 새 리뷰 없음",
+        "description": "오늘은 새로 올라온 서점 리뷰가 없습니다.\n봇은 정상 작동 중입니다.",
+        "color": 0x94A3B8,
+        "fields": [{"name": "전체 리뷰 보기", "value": f"[대시보드 열기]({DASHBOARD_URL})", "inline": False}],
+        "footer": {"text": f"이지스퍼블리싱 서점 리뷰 봇 · {today}"},
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+    urls = [u.strip() for u in webhook_url.split(",") if u.strip()]
+    for url in urls:
+        try:
+            r = requests.post(url, json={"embeds": [embed]}, timeout=10)
+            if r.status_code not in (200, 204):
+                print(f"[Discord] 발송 실패: HTTP {r.status_code} ({url[:60]}…)")
+            else:
+                print(f"[Discord] '리뷰 없음' 발송 완료 → {url[:60]}…")
+        except Exception as e:
+            print(f"[Discord] 오류: {e}")
+
+
 # ─── 메인 ────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="이지스퍼블리싱 구매평 Discord 알림봇")
@@ -716,6 +743,7 @@ def main():
         send_discord(webhook_url, all_new)
     else:
         print("[알림 없음] 새 서점 리뷰가 없습니다.")
+        send_discord_no_reviews(webhook_url)
 
 
 if __name__ == "__main__":
