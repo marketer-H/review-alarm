@@ -454,7 +454,11 @@ def _kyobo_title(isbn: str, product_id: str, cache: dict) -> str:
 
 
 def get_kyobo_reviews(isbn: str, cache: dict) -> tuple:
-    """(product_id, reviews, title) 반환. Playwright로 리뷰 목록 API 응답을 캡처."""
+    """(product_id, reviews, title) 반환. 교보 리뷰 목록 API를 직접 호출(requests).
+    리뷰는 페이지 스크롤 시 지연 로딩되지만, 페이지가 호출하는 API를 그대로 호출하면
+    Playwright 없이 바로 받을 수 있다.
+    별점 revwRvgr(1~4)는 10점 만점 환산(×2.5)하여 'N점/10점'으로 저장
+    → 대시보드 parseRating이 5점으로 환산해 표시."""
     product_id = _kyobo_product_id(isbn, cache)
     if not product_id:
         return None, [], isbn
@@ -463,45 +467,40 @@ def get_kyobo_reviews(isbn: str, cache: dict) -> tuple:
     reviews = []
 
     try:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page(
-                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            )
+        # revwPatrCode=000: 전체 리뷰(구매평+일반), reviewSort=002: 최신순
+        url = (
+            "https://product.kyobobook.co.kr/api/review/list"
+            "?page=1&pageLimit=50&reviewSort=002&revwPatrCode=000"
+            f"&saleCmdtids={product_id}&webToonYsno=N&allYsno=N"
+            f"&revwSummeryYn=Y&saleCmdtid={product_id}"
+        )
+        r = requests.get(
+            url,
+            headers={**JSON_HEADERS, "Referer": f"https://product.kyobobook.co.kr/detail/{product_id}"},
+            timeout=15,
+        )
+        if r.status_code != 200 or not r.text:
+            return product_id, [], title
 
-            captured = []
-            def on_response(resp):
-                if "api/review/list" in resp.url and "saleCmdtids" in resp.url:
-                    try:
-                        captured.append(resp.json())
-                    except Exception:
-                        pass
-            page.on("response", on_response)
-
-            page.goto(f"https://product.kyobobook.co.kr/detail/{product_id}",
-                      wait_until="networkidle", timeout=30000)
-            page.wait_for_timeout(2000)
-            browser.close()
-
-        for data in captured:
-            for rv in (data.get("data") or {}).get("reviewList") or []:
-                rv_id = str(rv.get("revwNum", ""))
-                text = (rv.get("revwCntt") or "").strip()
-                rating = rv.get("revwRvgr") or ""
-                reviewer = rv.get("mmbrId") or ""
-                date_raw = rv.get("cretDttm") or ""
-                date = date_raw[:10] if date_raw else ""
-                if rv_id and text:
-                    reviews.append({
-                        "id": rv_id,
-                        "text": text,
-                        "rating": str(rating),
-                        "reviewer": reviewer,
-                        "date": date,
-                        "title": title,
-                        "link": f"https://product.kyobobook.co.kr/detail/{product_id}",
-                    })
+        for rv in (r.json().get("data") or {}).get("reviewList") or []:
+            if rv.get("dltYsno") == "Y":  # 삭제된 리뷰 제외
+                continue
+            rv_id = str(rv.get("revwNum", ""))
+            text = clean_text(rv.get("revwCntt") or "")
+            if not rv_id or not text:
+                continue
+            rvgr = rv.get("revwRvgr")
+            rating = f"{rvgr * 2.5:g}점/10점" if rvgr else ""
+            date_raw = rv.get("cretDttm") or ""
+            reviews.append({
+                "id": rv_id,
+                "text": text,
+                "rating": rating,
+                "reviewer": rv.get("mmbrId") or "",
+                "date": date_raw[:10] if date_raw else "",
+                "title": title,
+                "link": f"https://product.kyobobook.co.kr/detail/{product_id}#review",
+            })
     except Exception as e:
         print(f"    [교보 오류] {isbn}: {e}")
 
