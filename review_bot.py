@@ -196,27 +196,16 @@ def _parse_aladin_comment_reviews(html: str, title: str, item_id: str) -> list:
         # 별점: star_on 이미지 개수
         stars = len(re.findall(r"icon_star_on\.png", block))
 
-        # 리뷰어명 + 날짜
-        reviewer_m = re.search(
-            r'href="[^"]*UserReview[^"]*"[^>]*>([^<]+)</a>', block
-        )
-        if not reviewer_m:
-            # 대안: 날짜 앞에 있는 ID
-            reviewer_m = re.search(r'<a[^>]+class="lnk_id"[^>]*>([^<]+)</a>', block)
+        # 리뷰어명: Ere_sub_gray8 클래스 링크 텍스트 (blog.aladin.co.kr)
+        reviewer_m = re.search(r'href="https://blog\.aladin\.co\.kr/\d+[^"]*"[^>]*>([^<]+)</a>', block)
         reviewer = reviewer_m.group(1).strip() if reviewer_m else "익명"
 
-        # 작성일 (Ere_sub_gray8 스팬)
-        date_m = re.search(r'Ere_sub_gray8[^>]*>\s*(\d{4}[-./]\d{1,2}[-./]\d{1,2})', block)
+        # 작성일: Ere_sub_gray8 스팬 중 날짜 형식
+        date_m = re.search(r'<span[^>]*Ere_sub_gray8[^>]*>\s*(\d{4}[-./]\d{1,2}[-./]\d{1,2})\s*</span>', block)
         posted = normalize_date(date_m.group(1)) if date_m else ""
 
-        # 리뷰 텍스트
-        text_m = re.search(
-            rf'id="div_commentReviewPaper{rv_id}"[^>]*>(.*?)</div>',
-            block, re.DOTALL,
-        )
-        if not text_m:
-            # 스포일러 없는 경우
-            text_m = re.search(r'<div[^>]*id="[^"]*Paper[^"]*"[^>]*>(.*?)</div>', block, re.DOTALL)
+        # 리뷰 텍스트: <span id="spnPaper{id}"> 안에 있음
+        text_m = re.search(rf'id="spnPaper{rv_id}"[^>]*>(.*?)</span>', block, re.DOTALL)
         text = clean_text(text_m.group(1)) if text_m else ""
 
         if text and len(text) > 5:
