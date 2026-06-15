@@ -643,6 +643,7 @@ def main():
     parser.add_argument("--init", action="store_true", help="첫 실행: 현재 리뷰 기준점 저장 (알림 없음)")
     parser.add_argument("--test", action="store_true", help="Discord 웹훅 연결 테스트")
     parser.add_argument("--days", type=int, default=730, help="최근 N일 이내 출판 도서만 (기본 730)")
+    parser.add_argument("--no-discord", action="store_true", help="수집은 하되 Discord 알림은 보내지 않음 (테스트용)")
     args = parser.parse_args()
 
     config = load_config()
@@ -740,10 +741,16 @@ def main():
         print(f"  bash {BASE_DIR}/setup_cron.sh")
     elif all_new:
         save_reviews_log(all_new)
-        send_discord(webhook_url, all_new)
+        if args.no_discord:
+            print(f"[테스트] --no-discord: 알림 생략 (새 리뷰 {len(all_new)}개는 수집·저장됨)")
+        else:
+            send_discord(webhook_url, all_new)
     else:
         print("[알림 없음] 새 서점 리뷰가 없습니다.")
-        send_discord_no_reviews(webhook_url)
+        if args.no_discord:
+            print("[테스트] --no-discord: '리뷰 없음' 알림도 생략")
+        else:
+            send_discord_no_reviews(webhook_url)
 
 
 if __name__ == "__main__":

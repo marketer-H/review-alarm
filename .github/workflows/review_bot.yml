@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 0 * * *'   # 매일 0시 UTC = 한국 오전 9시 (실제 도착 9~12시)
   workflow_dispatch:       # GitHub에서 수동 실행 버튼
+    inputs:
+      send_discord:
+        description: '디스코드 알림 보내기 (끄면 알림 없이 수집만 — 테스트용)'
+        type: boolean
+        default: true
 
 jobs:
   run:
@@ -31,7 +36,13 @@ jobs:
           }' > config.json
 
       - name: 구매평 봇 실행
-        run: python review_bot.py
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.send_discord }}" = "false" ]; then
+            echo "수동 테스트 실행: 알림 없이 수집만 진행합니다 (--no-discord)"
+            python review_bot.py --no-discord
+          else
+            python review_bot.py
+          fi
 
       - name: 상태 파일 커밋
         run: |
