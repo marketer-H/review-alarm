@@ -35,6 +35,9 @@ jobs:
             "stores": ["aladin", "yes24", "kyobo"]
           }' > config.json
 
+      - name: 신간 자동 발견 (이지스퍼블리싱)
+        run: python update_isbns.py
+
       - name: 구매평 봇 실행
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.send_discord }}" = "false" ]; then
@@ -48,6 +51,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add review_state.json isbn_cache.json reviews_log.json
+          git add review_state.json isbn_cache.json reviews_log.json isbns.txt
           git diff --staged --quiet || git commit -m "chore: update review state & log"
           git push
