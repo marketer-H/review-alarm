@@ -627,6 +627,30 @@ def send_discord_no_reviews(webhook_url: str):
             print(f"[Discord] 오류: {e}")
 
 
+# ─── 제목/최신성 헬퍼 ────────────────────────────────────────────────
+# 알림에 포함할 리뷰의 최대 나이(일). 기준점 누락 등으로 과거 리뷰가
+# 뒤늦게 '새 리뷰'로 잡혀 알림이 가는 것을 방지한다.
+ALERT_MAX_AGE_DAYS = 30
+
+def best_title(isbn: str, cache: dict) -> str:
+    """서점별로 제목이 다르게(또는 ISBN으로) 잡히는 문제 방지: 캐시에서
+    가장 신뢰도 높은 제목 하나를 골라 모든 서점 리뷰에 통일 적용."""
+    for key in (f"_aladin_title_{isbn}", f"_title_{isbn}", f"_yes24_title_{isbn}"):
+        t = cache.get(key)
+        if t and not str(t).strip().isdigit():
+            return t
+    return isbn
+
+def _is_recent(date_str: str) -> bool:
+    """리뷰 작성일이 ALERT_MAX_AGE_DAYS 이내인지. 날짜 미상은 포함."""
+    if not date_str:
+        return True
+    try:
+        return date.fromisoformat(date_str).toordinal() >= date.today().toordinal() - ALERT_MAX_AGE_DAYS
+    except ValueError:
+        return True
+
+
 # ─── 메인 ────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="이지스퍼블리싱 구매평 Discord 알림봇")
@@ -714,10 +738,17 @@ def main():
             state[isbn]["kyobo"] = all_ids[-300:]
 
         if found:
-            book_title = next((rv["title"] for rv in found if rv.get("title")), isbn)
-            print(f"  {isbn} ({book_title[:30]}) → 새 구매평 {len(found)}개")
+            # 서점 간 제목 통일 (그룹화 깨짐 방지)
+            title = best_title(isbn, cache)
+            for rv in found:
+                rv["title"] = title
+            print(f"  {isbn} ({title[:30]}) → 새 구매평 {len(found)}개")
             if not args.init:
-                all_new.extend(found)
+                recent = [rv for rv in found if _is_recent(rv.get("date"))]
+                stale = len(found) - len(recent)
+                if stale:
+                    print(f"    (작성일 {ALERT_MAX_AGE_DAYS}일 초과 {stale}건은 알림 제외)")
+                all_new.extend(recent)
 
         time.sleep(0.4)
 
