@@ -39,13 +39,15 @@ jobs:
         run: python update_isbns.py
 
       - name: 구매평 봇 실행
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.send_discord }}" = "false" ]; then
-            echo "수동 테스트 실행: 알림 없이 수집만 진행합니다 (--no-discord)"
-            python review_bot.py --no-discord
-          else
-            python review_bot.py
-          fi
+        # ⏸ 디스코드 알림 일시 중단 중 — 대시보드 수집/업데이트는 계속, 발송만 안 함.
+        # 알림을 다시 켜려면 아래 run을 지우고 주석의 '원래 실행'으로 되돌리세요.
+        run: python review_bot.py --no-discord
+        # 원래 실행(알림 ON):
+        #   if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.send_discord }}" = "false" ]; then
+        #     python review_bot.py --no-discord
+        #   else
+        #     python review_bot.py
+        #   fi
 
       - name: 상태 파일 커밋
         run: |
