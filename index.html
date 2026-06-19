@@ -171,6 +171,16 @@ header span { font-size: 13px; color: #93c5fd; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* 대응 필요 섹션 */
+.action-needed { background:#fff7f7; border:1.5px solid #fecaca; border-radius:12px; padding:14px 16px; margin-bottom:28px; }
+.action-head { font-size:15px; font-weight:700; color:#b91c1c; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.an-count { background:#dc2626; color:#fff; font-size:12px; padding:2px 9px; border-radius:11px; font-weight:600; }
+.an-item { background:#fff; border:1px solid #fee2e2; border-left:4px solid #ef4444; border-radius:8px; padding:12px 14px; margin-bottom:10px; }
+.an-item:last-child { margin-bottom:0; }
+.an-meta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+.an-book { font-size:13px; font-weight:700; color:#1e293b; text-decoration:none; }
+.an-book:hover { text-decoration:underline; }
+
 /* 모바일 */
 @media (max-width: 640px) {
   header { padding: 16px 20px; }
@@ -308,6 +318,14 @@ function ratingBadge(rating) {
   return `<span class="review-rating${low}">⭐ ${n}점</span>`;
 }
 
+// 대응이 필요한 리뷰: 5점 환산 ★2 이하 또는 본문에 문제 키워드 포함
+const ALERT_KW = /환불|반품|파본|파손|훼손|오타|오류|에러|안\s?돼|안\s?됨|작동\s?안|실행\s?안|동작\s?안|실망|최악|비추|누락|불량|엉터리|쓰레기/;
+function needsResponse(r) {
+  const n = parseRating(r.rating);
+  if (n !== null && n <= 2) return true;
+  return ALERT_KW.test(r.text || '');
+}
+
 function renderStats() {
   const todayCount = allReviews.filter(r => r.date === TODAY).length;
   const weekAgo = toISO(new Date(Date.now() - 7 * 86400000));
@@ -355,7 +373,24 @@ function render(reviews) {
       (byDate[r.date][r.title] || []).concat(r);
   });
 
+  const flagged = reviews.filter(needsResponse).sort((a,b)=>b.date.localeCompare(a.date));
   let html = '';
+  if (flagged.length) {
+    html += `<div class="action-needed">
+      <div class="action-head">⚠️ 대응이 필요한 리뷰 <span class="an-count">${flagged.length}</span></div>`;
+    flagged.forEach(rv => {
+      html += `<div class="an-item">
+        <div class="an-meta">
+          <span class="store-badge ${rv.store}">${storeLabel(rv.store)}</span>
+          ${ratingBadge(rv.rating)}
+          <a class="an-book" href="${rv.link||'#'}" target="_blank">${rv.title}</a>
+          <span class="review-reviewer">${rv.reviewer||''} · ${formatDate(rv.date)}</span>
+        </div>
+        <div class="review-text">${rv.text||'(내용 없음)'}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
   Object.keys(byDate).sort((a,b)=>b.localeCompare(a)).forEach(date => {
     const dayCount = Object.values(byDate[date]).reduce((s,a)=>s+a.length,0);
     const isToday = date === TODAY;

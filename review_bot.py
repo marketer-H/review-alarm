@@ -551,7 +551,12 @@ def send_discord(webhook_url: str, new_reviews: list):
     used = 0
     shown = 0
     truncated = False
-    for title, rvs in sorted(by_book.items(), key=lambda x: -len(x[1])):
+    flagged_total = sum(1 for rv in new_reviews if needs_response(rv))
+    def _book_key(item):
+        # 대응 필요 리뷰가 있는 책을 맨 위로, 그다음 리뷰 많은 순
+        return (not any(needs_response(rv) for rv in item[1]), -len(item[1]))
+    for title, rvs in sorted(by_book.items(), key=_book_key):
+        rvs = sorted(rvs, key=lambda rv: not needs_response(rv))  # 대응 필요 리뷰 먼저
         header = f"\n**{title[:30]}** — {len(rvs)}개" if parts else f"**{title[:30]}** — {len(rvs)}개"
         if used + len(header) > MAX_DESC:
             truncated = True
@@ -560,11 +565,12 @@ def send_discord(webhook_url: str, new_reviews: list):
         used += len(header)
         for rv in rvs:
             emoji = STORE_EMOJI.get(rv.get("store", ""), "▪️")
+            flag = "🚨 " if needs_response(rv) else ""
             meta = " · ".join(x for x in (rv.get("rating", ""), rv.get("date", ""), rv.get("reviewer", "")) if x)
             text = rv.get("text", "").strip()
             if len(text) > 150:
                 text = text[:150] + "…"
-            chunk = f"{emoji} {meta}".rstrip() + f"\n> {text} [↗]({rv.get('link', DASHBOARD_URL)})"
+            chunk = f"{flag}{emoji} {meta}".rstrip() + f"\n> {text} [↗]({rv.get('link', DASHBOARD_URL)})"
             if used + len(chunk) > MAX_DESC:
                 truncated = True
                 break
@@ -579,8 +585,11 @@ def send_discord(webhook_url: str, new_reviews: list):
     description = "\n".join(parts)
     total_count = len(new_reviews)
 
+    title_line = f"📬 오늘의 서점 리뷰 알림 — 총 {total_count}개"
+    if flagged_total:
+        title_line += f"  ·  🚨 대응 필요 {flagged_total}건"
     embed = {
-        "title": f"📬 오늘의 서점 리뷰 알림 — 총 {total_count}개",
+        "title": title_line,
         "description": description,
         "color": 0x3B82F6,
         "fields": [{"name": "전체 리뷰 보기", "value": f"[대시보드 열기]({DASHBOARD_URL})", "inline": False}],
@@ -631,6 +640,33 @@ def send_discord_no_reviews(webhook_url: str):
 # 알림에 포함할 리뷰의 최대 나이(일). 기준점 누락 등으로 과거 리뷰가
 # 뒤늦게 '새 리뷰'로 잡혀 알림이 가는 것을 방지한다.
 ALERT_MAX_AGE_DAYS = 30
+
+# 대응(응대)이 필요한 리뷰를 가려내는 문제 키워드
+ALERT_KEYWORDS = (
+    "환불", "반품", "파본", "파손", "훼손", "오타", "오류", "에러",
+    "안 돼", "안돼", "안 됨", "안됨", "작동 안", "실행 안", "동작 안",
+    "실망", "최악", "비추", "누락", "불량", "엉터리", "쓰레기",
+)
+
+def rating_to_5(raw):
+    """별점 문자열을 5점 만점으로 환산. 실패 시 None. (대시보드 parseRating과 동일 규칙)"""
+    if not raw:
+        return None
+    m = re.search(r"(\d+(?:\.\d+)?)\s*점?\s*(?:/\s*(\d+(?:\.\d+)?)\s*점?)?", str(raw))
+    if not m:
+        return None
+    n = float(m.group(1))
+    mx = float(m.group(2)) if m.group(2) else (10.0 if n > 5 else 5.0)
+    if not mx or n > mx:
+        return None
+    return round(n / mx * 5, 1)
+
+def needs_response(rv: dict) -> bool:
+    """대응이 필요한 리뷰: 5점 환산 ★2 이하 또는 본문에 문제 키워드 포함."""
+    n = rating_to_5(rv.get("rating"))
+    if n is not None and n <= 2:
+        return True
+    return any(k in (rv.get("text") or "") for k in ALERT_KEYWORDS)
 
 def best_title(isbn: str, cache: dict) -> str:
     """서점별로 제목이 다르게(또는 ISBN으로) 잡히는 문제 방지: 캐시에서
