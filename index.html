@@ -190,6 +190,11 @@ header span { font-size: 13px; color: #93c5fd; }
 .an-copy { font-size:11px; padding:2px 10px; border:1px solid #cbd5e1; background:#fff; border-radius:6px; cursor:pointer; color:#334155; }
 .an-copy:hover { background:#f1f5f9; }
 .an-suggest-text { font-size:13px; line-height:1.6; color:#334155; white-space:pre-wrap; }
+.an-done-toggle { margin-left:auto; font-size:12px; color:#475569; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer; white-space:nowrap; }
+.an-done-count { background:#16a34a; color:#fff; font-size:12px; padding:2px 9px; border-radius:11px; font-weight:600; }
+.an-item.done { opacity:.6; border-left-color:#16a34a; background:#f6fdf9; }
+.an-item.done .an-book { text-decoration:line-through; }
+.an-item.done .an-suggest { display:none; }
 
 /* 모바일 */
 @media (max-width: 640px) {
@@ -361,6 +366,19 @@ function copyText(btn) {
   });
 }
 
+// 대응 완료 체크 상태 (브라우저 localStorage에 저장 — 새로고침해도 유지)
+function reviewKey(r) { return `${r.store}:${r.id}`; }
+function loadDone() {
+  try { return new Set(JSON.parse(localStorage.getItem('reviewDone') || '[]')); }
+  catch (e) { return new Set(); }
+}
+function toggleDone(input) {
+  const set = loadDone();
+  if (input.checked) set.add(input.dataset.key); else set.delete(input.dataset.key);
+  localStorage.setItem('reviewDone', JSON.stringify([...set]));
+  applyFilters();  // 카운트·정렬 갱신
+}
+
 function renderStats() {
   const todayCount = allReviews.filter(r => r.date === TODAY).length;
   const weekAgo = toISO(new Date(Date.now() - 7 * 86400000));
@@ -408,20 +426,30 @@ function render(reviews) {
       (byDate[r.date][r.title] || []).concat(r);
   });
 
-  const flagged = reviews.filter(needsResponse).sort((a,b)=>b.date.localeCompare(a.date));
+  const doneSet = loadDone();
+  const flagged = reviews.filter(needsResponse).sort((a,b) => {
+    const da = doneSet.has(reviewKey(a)), db = doneSet.has(reviewKey(b));
+    if (da !== db) return da ? 1 : -1;        // 완료된 건 아래로
+    return b.date.localeCompare(a.date);
+  });
   let html = '';
   if (flagged.length) {
+    const remaining = flagged.filter(r => !doneSet.has(reviewKey(r))).length;
+    const doneCount = flagged.length - remaining;
     html += `<div class="action-needed">
-      <div class="action-head">⚠️ 대응이 필요한 리뷰 <span class="an-count">${flagged.length}</span> <span class="an-hint">ⓘ 기준</span>
+      <div class="action-head">⚠️ 대응이 필요한 리뷰 <span class="an-count">${remaining}</span>${doneCount ? ` <span class="an-done-count">완료 ${doneCount}</span>` : ''} <span class="an-hint">ⓘ 기준</span>
         <span class="an-tip">대응 필요 = 별점 ★2 이하(5점 환산) 또는 본문에 문제 키워드(환불·반품·파본·오타·오류·안 됨·누락·실망·최악 등) 포함. 추천 응대는 유형별 템플릿(파본 / 환불 / 오류·예제 / 일반 불만)으로 자동 생성됩니다.</span>
       </div>`;
     flagged.forEach(rv => {
-      html += `<div class="an-item">
+      const key = reviewKey(rv);
+      const done = doneSet.has(key);
+      html += `<div class="an-item${done ? ' done' : ''}">
         <div class="an-meta">
           <span class="store-badge ${rv.store}">${storeLabel(rv.store)}</span>
           ${ratingBadge(rv.rating)}
           <a class="an-book" href="${rv.link||'#'}" target="_blank">${rv.title}</a>
           <span class="review-reviewer">${rv.reviewer||''} · ${formatDate(rv.date)}</span>
+          <label class="an-done-toggle"><input type="checkbox" data-key="${key}" ${done ? 'checked' : ''} onchange="toggleDone(this)"> 대응 완료</label>
         </div>
         <div class="review-text">${rv.text||'(내용 없음)'}</div>
         <div class="an-suggest">
