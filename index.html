@@ -173,8 +173,13 @@ header span { font-size: 13px; color: #93c5fd; }
 
 /* 대응 필요 섹션 */
 .action-needed { background:#fff7f7; border:1.5px solid #fecaca; border-radius:12px; padding:14px 16px; margin-bottom:28px; }
-.action-head { font-size:15px; font-weight:700; color:#b91c1c; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.action-head { font-size:15px; font-weight:700; color:#b91c1c; margin-bottom:12px; display:flex; align-items:center; gap:8px; position:relative; cursor:help; }
 .an-count { background:#dc2626; color:#fff; font-size:12px; padding:2px 9px; border-radius:11px; font-weight:600; }
+.an-hint { font-size:11px; font-weight:500; color:#b91c1c; opacity:.65; }
+.an-tip { display:none; position:absolute; left:0; top:135%; z-index:30; width:330px; max-width:90vw;
+  background:#1e293b; color:#f1f5f9; font-size:12px; font-weight:400; line-height:1.7;
+  padding:11px 13px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.2); }
+.action-head:hover .an-tip, .action-head:focus-within .an-tip { display:block; }
 .an-item { background:#fff; border:1px solid #fee2e2; border-left:4px solid #ef4444; border-radius:8px; padding:12px 14px; margin-bottom:10px; }
 .an-item:last-child { margin-bottom:0; }
 .an-meta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
@@ -334,7 +339,8 @@ function needsResponse(r) {
 // 비용 없이 유형별 추천 응대 문구(초안) 생성
 function suggestResponse(r) {
   const text = r.text || '';
-  const title = (r.title || '').trim();
+  // 응대 문구에는 본 제목만 (부제·시리즈명·저자 제거: '본제목 | 부제 | 저자' → '본제목')
+  const title = (r.title || '').split('|')[0].trim();
   const book = (title && !/^\d+$/.test(title)) ? `《${title}》` : '해당 도서';
   const has = (...ks) => ks.some(k => text.includes(k));
   if (has('파본','파손','훼손'))
@@ -343,7 +349,7 @@ function suggestResponse(r) {
     return `안녕하세요, 이지스퍼블리싱입니다. ${book} 구매 과정에서 불편을 드려 죄송합니다. 환불·교환은 구매처 고객센터에서, 도서 내용 문의는 출판사로 연락 주시면 성심껏 돕겠습니다. 소중한 의견 감사합니다.`;
   if (has('오타','오류','에러','안 돼','안돼','안 됨','안됨','작동 안','실행 안','동작 안','누락'))
     return `안녕하세요, 이지스퍼블리싱입니다. ${book} 학습에 불편을 드려 죄송합니다. 말씀해주신 부분을 편집부에서 확인해 정오표·자료 업데이트에 반영하겠습니다. 페이지나 예제 위치를 알려주시면 더 빠르게 도와드리겠습니다. 소중한 의견 감사합니다.`;
-  return `안녕하세요, 이지스퍼블리싱입니다. ${book}이(가) 기대에 미치지 못해 죄송합니다. 아쉬우셨던 점을 구체적으로 알려주시면 다음 쇄·개정판에 적극 반영하겠습니다. 소중한 피드백 감사합니다.`;
+  return `안녕하세요, 이지스퍼블리싱입니다. ${book}을(를) 읽어주셔서 감사합니다. 기대에 미치지 못한 점 죄송하며, 주신 의견은 더 나은 책을 만드는 데 소중히 참고하겠습니다.`;
 }
 
 function copyText(btn) {
@@ -406,7 +412,9 @@ function render(reviews) {
   let html = '';
   if (flagged.length) {
     html += `<div class="action-needed">
-      <div class="action-head">⚠️ 대응이 필요한 리뷰 <span class="an-count">${flagged.length}</span></div>`;
+      <div class="action-head">⚠️ 대응이 필요한 리뷰 <span class="an-count">${flagged.length}</span> <span class="an-hint">ⓘ 기준</span>
+        <span class="an-tip">대응 필요 = 별점 ★2 이하(5점 환산) 또는 본문에 문제 키워드(환불·반품·파본·오타·오류·안 됨·누락·실망·최악 등) 포함. 추천 응대는 유형별 템플릿(파본 / 환불 / 오류·예제 / 일반 불만)으로 자동 생성됩니다.</span>
+      </div>`;
     flagged.forEach(rv => {
       html += `<div class="an-item">
         <div class="an-meta">
