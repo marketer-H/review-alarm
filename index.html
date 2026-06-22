@@ -334,12 +334,10 @@ function ratingBadge(rating) {
   return `<span class="review-rating${low}">⭐ ${n}점</span>`;
 }
 
-// 대응이 필요한 리뷰: 5점 환산 ★2 이하 또는 본문에 문제 키워드 포함
-const ALERT_KW = /환불|반품|파본|파손|훼손|오타|오류|에러|안\s?돼|안\s?됨|작동\s?안|실행\s?안|동작\s?안|실망|최악|비추|누락|불량|엉터리|쓰레기/;
+// 대응이 필요한 리뷰: 별점 ★2 이하(5점 환산)만
 function needsResponse(r) {
   const n = parseRating(r.rating);
-  if (n !== null && n <= 2) return true;
-  return ALERT_KW.test(r.text || '');
+  return n !== null && n <= 2;
 }
 
 // 비용 없이 유형별 추천 응대 문구(초안) 생성
@@ -426,7 +424,7 @@ function render(reviews) {
   if (flagged.length) {
     html += `<div class="action-needed">
       <div class="action-head">⚠️ 대응이 필요한 리뷰 <span class="an-count">${flagged.length}</span> <span class="an-hint">ⓘ 기준</span>
-        <span class="an-tip">최근 ${AN_WINDOW_DAYS}일 이내 올라온 리뷰 중 별점 ★2 이하(5점 환산) 또는 문제 키워드(환불·반품·파본·오타·오류·안 됨·누락·실망·최악 등) 포함. ${AN_WINDOW_DAYS}일이 지나면 자동으로 사라집니다. 추천 응대는 유형별 템플릿으로 자동 생성됩니다.</span>
+        <span class="an-tip">최근 ${AN_WINDOW_DAYS}일 이내 올라온 별점 ★2 이하(5점 환산) 리뷰. ${AN_WINDOW_DAYS}일이 지나면 자동으로 사라집니다. 추천 응대는 유형별 템플릿으로 자동 생성됩니다.</span>
       </div>`;
     flagged.forEach(rv => {
       html += `<div class="an-item">
