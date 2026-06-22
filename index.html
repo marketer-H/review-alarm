@@ -415,7 +415,7 @@ function render(reviews) {
       (byDate[r.date][r.title] || []).concat(r);
   });
 
-  const AN_WINDOW_DAYS = 5;
+  const AN_WINDOW_DAYS = 3;
   const anCutoff = toISO(new Date(Date.now() - AN_WINDOW_DAYS * 86400000));
   const flagged = reviews
     .filter(r => needsResponse(r) && r.date >= anCutoff)
