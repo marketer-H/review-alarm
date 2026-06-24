@@ -102,6 +102,9 @@ header span { font-size: 13px; color: #93c5fd; }
 .stat-card .stat-sub { font-size: 12px; color: #64748b; margin-top: 4px; }
 .stat-card.alert .stat-value { color: #dc2626; }
 .stat-card.alert { border-color: #fecaca; background: #fff8f8; }
+.stat-card.clickable { cursor: pointer; transition: background .15s, box-shadow .15s; }
+.stat-card.clickable:hover { background: #fff1f1; box-shadow: 0 2px 10px rgba(220,38,38,.12); }
+.stat-card.alert .stat-sub { color: #dc2626; font-weight: 600; }
 
 .date-group { margin-bottom: 36px; }
 .date-label {
@@ -348,6 +351,13 @@ function isActionable(r) {
   return r.date > cutoff;
 }
 
+// 상단 '대응 필요' 카드 클릭 → 대응 필요 섹션으로 스크롤
+function scrollToActionNeeded() {
+  resetFilters();  // 필터 걸려 있으면 해제해 섹션이 보이도록
+  const el = document.querySelector('.action-needed');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 // 비용 없이 유형별 추천 응대 문구(초안) 생성
 function suggestResponse(r) {
   const text = r.text || '';
@@ -400,10 +410,10 @@ function renderStats() {
       <div class="stat-value">${avg === '-' ? '-' : '⭐ ' + avg}</div>
       <div class="stat-sub">전체 ${allReviews.length}개 기준</div>
     </div>
-    <div class="stat-card${lowCount ? ' alert' : ''}">
+    <div class="stat-card${lowCount ? ' alert clickable' : ''}"${lowCount ? ' onclick="scrollToActionNeeded()"' : ''}>
       <div class="stat-label">대응 필요 (최근 ${AN_WINDOW_DAYS}일)</div>
       <div class="stat-value">${lowCount}개</div>
-      ${lowCount ? '<div class="stat-sub">확인이 필요해요</div>' : ''}
+      ${lowCount ? '<div class="stat-sub">클릭해서 확인 →</div>' : ''}
     </div>`;
 }
 
