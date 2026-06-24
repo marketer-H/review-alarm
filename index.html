@@ -340,6 +340,14 @@ function needsResponse(r) {
   return n !== null && n <= 2;
 }
 
+// 대응 필요 노출 기간(일): 별점 ★2 이하 + 최근 N일 이내
+const AN_WINDOW_DAYS = 3;
+function isActionable(r) {
+  if (!needsResponse(r)) return false;
+  const cutoff = toISO(new Date(Date.now() - AN_WINDOW_DAYS * 86400000));
+  return r.date > cutoff;
+}
+
 // 비용 없이 유형별 추천 응대 문구(초안) 생성
 function suggestResponse(r) {
   const text = r.text || '';
@@ -374,7 +382,7 @@ function renderStats() {
   const weekCount = allReviews.filter(r => r.date >= weekAgo).length;
   const rated = allReviews.map(r => parseRating(r.rating)).filter(n => n !== null);
   const avg = rated.length ? (rated.reduce((s,n)=>s+n,0) / rated.length).toFixed(1) : '-';
-  const lowCount = rated.filter(n => n <= 2).length;
+  const lowCount = allReviews.filter(isActionable).length;
 
   const stats = document.getElementById('stats');
   stats.style.display = '';
@@ -393,7 +401,7 @@ function renderStats() {
       <div class="stat-sub">전체 ${allReviews.length}개 기준</div>
     </div>
     <div class="stat-card${lowCount ? ' alert' : ''}">
-      <div class="stat-label">낮은 별점 (1~2점)</div>
+      <div class="stat-label">대응 필요 (최근 ${AN_WINDOW_DAYS}일)</div>
       <div class="stat-value">${lowCount}개</div>
       ${lowCount ? '<div class="stat-sub">확인이 필요해요</div>' : ''}
     </div>`;
@@ -415,11 +423,7 @@ function render(reviews) {
       (byDate[r.date][r.title] || []).concat(r);
   });
 
-  const AN_WINDOW_DAYS = 3;
-  const anCutoff = toISO(new Date(Date.now() - AN_WINDOW_DAYS * 86400000));
-  const flagged = reviews
-    .filter(r => needsResponse(r) && r.date > anCutoff)
-    .sort((a,b) => b.date.localeCompare(a.date));
+  const flagged = reviews.filter(isActionable).sort((a,b) => b.date.localeCompare(a.date));
   let html = '';
   if (flagged.length) {
     html += `<div class="action-needed">
