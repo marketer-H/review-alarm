@@ -418,7 +418,7 @@ function render(reviews) {
   const AN_WINDOW_DAYS = 3;
   const anCutoff = toISO(new Date(Date.now() - AN_WINDOW_DAYS * 86400000));
   const flagged = reviews
-    .filter(r => needsResponse(r) && r.date >= anCutoff)
+    .filter(r => needsResponse(r) && r.date > anCutoff)
     .sort((a,b) => b.date.localeCompare(a.date));
   let html = '';
   if (flagged.length) {
