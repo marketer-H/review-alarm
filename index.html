@@ -109,6 +109,9 @@ header span { font-size: 13px; color: #93c5fd; }
 .best-count { background:#3b82f6; color:#fff; font-size:12px; padding:2px 9px; border-radius:11px; }
 .best-toolbar { margin-bottom:12px; }
 .best-toolbar select { padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; background:#fff; color:#1e293b; max-width:100%; cursor:pointer; }
+.ins-toolbar { display:flex; gap:8px; flex-wrap:wrap; }
+.ins-toolbar input { flex:1 1 200px; min-width:160px; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; color:#1e293b; }
+.ins-toolbar input:focus { outline:none; border-color:#3b82f6; }
 .best-note { font-size:12px; color:#3730a3; background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px; padding:8px 11px; margin-bottom:14px; line-height:1.6; }
 .best-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px 18px 14px; margin-bottom:12px; }
 .best-quote { font-size:15px; line-height:1.65; color:#1e293b; font-style:italic; }
@@ -472,21 +475,47 @@ function copyBest(btn) {
 // 인사이트: book_insights.json(책별 칭찬 포인트 / 아쉬운 점 요약)을 표시
 let bookInsights = [];
 let insightBook = '';
+let insightQuery = '';
 function renderInsight() {
   const el = document.getElementById('tab-insight');
-  const allBooks = bookInsights;
-  if (!allBooks.length) {
+  if (!bookInsights.length) {
     el.innerHTML = `<div class="empty">아직 인사이트 데이터가 없습니다.</div>`;
     return;
   }
-  if (insightBook && !allBooks.some(b => b.book === insightBook)) insightBook = '';
-  const all = insightBook ? allBooks.filter(b => b.book === insightBook) : allBooks;
-  const opts = `<option value="">📚 전체 도서 (${allBooks.length}종)</option>` +
-    allBooks.map(b => `<option value="${b.book.replace(/"/g, '&quot;')}"${b.book === insightBook ? ' selected' : ''}>${b.book} (${b.count}건)</option>`).join('');
-  let html = `<div class="best-head">📊 책별 독자 반응 한눈에 <span class="best-count">${all.length}종</span></div>
-    <div class="best-toolbar"><select id="insight-book" onchange="insightBook=this.value; renderInsight()">${opts}</select></div>
-    <div class="best-note"><b>이렇게 정리했어요</b> — 책마다 실제 후기를 모아 <b>독자들이 자주 칭찬한 점</b>과 <b>아쉬워한 점</b>을 요약했습니다. 리뷰를 다 읽지 않아도 핵심을 파악하고, 칭찬 포인트는 마케팅에, 아쉬운 점은 개정·기획에 참고하세요. (후기 수가 적은 책은 표본이 작으니 참고만)</div>`;
-  all.forEach(b => {
+  insightBook = ''; insightQuery = '';   // 탭 열 때 필터 초기화
+  const opts = `<option value="">📚 전체 도서 (${bookInsights.length}종)</option>` +
+    bookInsights.map(b => `<option value="${b.book.replace(/"/g, '&quot;')}">${b.book} (${b.count}건)</option>`).join('');
+  el.innerHTML = `<div class="best-head">📊 책별 독자 반응 한눈에 <span class="best-count" id="insight-count">${bookInsights.length}종</span></div>
+    <div class="best-toolbar ins-toolbar">
+      <input id="insight-search" type="text" placeholder="🔍 책 제목 검색…" oninput="insightSearch(this.value)">
+      <select id="insight-book" onchange="insightPick(this.value)">${opts}</select>
+    </div>
+    <div class="best-note"><b>이렇게 정리했어요</b> — 책마다 실제 후기를 모아 <b>독자들이 자주 칭찬한 점</b>과 <b>아쉬워한 점</b>을 요약했습니다. 리뷰를 다 읽지 않아도 핵심을 파악하고, 칭찬 포인트는 마케팅에, 아쉬운 점은 개정·기획에 참고하세요. (후기 수가 적은 책은 표본이 작으니 참고만)</div>
+    <div id="insight-cards"></div>`;
+  renderInsightCards();
+}
+// 검색(입력) — 카드만 갱신해 입력칸 포커스 유지
+function insightSearch(v) {
+  insightQuery = v; insightBook = '';
+  const s = document.getElementById('insight-book'); if (s) s.value = '';
+  renderInsightCards();
+}
+// 드롭다운 선택
+function insightPick(v) {
+  insightBook = v; insightQuery = '';
+  const i = document.getElementById('insight-search'); if (i) i.value = '';
+  renderInsightCards();
+}
+function renderInsightCards() {
+  let list = bookInsights;
+  const q = insightQuery.trim().toLowerCase();
+  if (q) list = list.filter(b => b.book.toLowerCase().includes(q));
+  else if (insightBook) list = list.filter(b => b.book === insightBook);
+  const cnt = document.getElementById('insight-count'); if (cnt) cnt.textContent = list.length + '종';
+  const wrap = document.getElementById('insight-cards');
+  if (!list.length) { wrap.innerHTML = `<div class="empty">검색 결과가 없습니다.</div>`; return; }
+  let html = '';
+  list.forEach(b => {
     const stars = '★'.repeat(Math.round(b.avg)) + '☆'.repeat(5 - Math.round(b.avg));
     const praise = (b.praise || []).map(p => `<li>${p}</li>`).join('');
     const cons = (b.cons || []).map(c => `<li>${c}</li>`).join('');
@@ -500,7 +529,7 @@ function renderInsight() {
              : `<div class="ins-sec ins-clean">⚠️ 아쉬운 점으로 두드러진 의견 없음</div>`}
     </div>`;
   });
-  el.innerHTML = html;
+  wrap.innerHTML = html;
 }
 
 // 비용 없이 유형별 추천 응대 문구(초안) 생성
