@@ -409,16 +409,14 @@ function snippetOf(t, max) {
   return i > max * 0.4 ? s.slice(0, i + 1).trim() : s.trim() + '…';
 }
 
-// 마케팅 문구: ★4.5 이상 + 정리 후 40자 이상, 책별 필터 + 최신순
+// 마케팅 문구: marketing_quotes.json(사람이 엄선·정리한 추천 문구)을 책별로 표시
 let bestBook = '';
+let marketingQuotes = [];
 function renderBest() {
   const el = document.getElementById('tab-best');
-  const all = allReviews
-    .map(r => ({ r, q: cleanQuote(r.text, (r.title || '').split('|')[0].trim()), book: (r.title || '').split('|')[0].trim() }))
-    .filter(x => { const n = parseRating(x.r.rating); return n !== null && n >= 4.5 && x.q.length >= 40; })
-    .sort((a, b) => b.r.date.localeCompare(a.r.date));
+  const all = marketingQuotes;
   if (!all.length) {
-    el.innerHTML = `<div class="empty">아직 표시할 후기가 없습니다.</div>`;
+    el.innerHTML = `<div class="empty">아직 마케팅 추천 문구가 없습니다.</div>`;
     return;
   }
   const counts = {};
@@ -430,15 +428,14 @@ function renderBest() {
     books.map(b => `<option value="${b.replace(/"/g, '&quot;')}"${b === bestBook ? ' selected' : ''}>${b} (${counts[b]})</option>`).join('');
   let html = `<div class="best-head">📣 마케팅 문구로 쓰기 좋은 후기 <span class="best-count">${shown.length}</span></div>
     <div class="best-toolbar"><select id="best-book" onchange="bestBook=this.value; renderBest()">${opts}</select></div>
-    <div class="best-note"><b>선정 기준</b> — 별점 ★4.5 이상 + 내용 있는 후기(40자 이상)만 모았습니다. 협찬 고지·군더더기는 자동 정리했고, <b>문구 복사</b>를 누르면 출처까지 붙어 복사됩니다.</div>`;
-  shown.forEach(({ r, q, book }) => {
-    const n = parseRating(r.rating);
-    const snip = snippetOf(q, 160);
-    const copyStr = `"${snip}" — 《${book}》 독자 후기 (${storeLabel(r.store)} ⭐${n})`;
+    <div class="best-note"><b>이렇게 골랐어요</b> — 실제 독자 후기 중 <b>구체적이고 설득력 있는 문장</b>만 추려, 협찬 고지·군더더기를 정리해 다듬은 추천 카피입니다. <b>문구 복사</b>를 누르면 출처까지 붙어 복사돼요. (SNS·상세페이지·카드뉴스에 바로 활용)</div>`;
+  shown.forEach(x => {
+    const n = x.rating || 5;
+    const copyStr = `"${x.quote}" — 《${x.book}》 독자 후기 (${storeLabel(x.store)} ⭐${n})`;
     html += `<div class="best-card">
-      <div class="best-quote">“${snip}”</div>
+      <div class="best-quote">“${x.quote}”</div>
       <div class="best-meta">
-        <span class="best-attr">《${book}》 · ${storeLabel(r.store)} ⭐${n}점 · ${r.reviewer || ''}</span>
+        <span class="best-attr">《${x.book}》 · ${storeLabel(x.store)} ⭐${n}점 · ${x.reviewer || ''}</span>
         <button class="an-copy" style="margin-left:auto" onclick="copyBest(this)">📋 문구 복사</button>
       </div>
       <div class="best-copy" style="display:none">${copyStr}</div>
@@ -620,6 +617,9 @@ async function load() {
   try {
     const res = await fetch('reviews_log.json?_=' + Date.now());
     allReviews = (await res.json()).sort((a,b)=>b.date.localeCompare(a.date));
+
+    try { marketingQuotes = await (await fetch('marketing_quotes.json?_=' + Date.now())).json(); }
+    catch (e) { marketingQuotes = []; }
 
     const dates = [...new Set(allReviews.map(r=>r.date))].sort((a,b)=>b.localeCompare(a));
     dateCounts = {};
