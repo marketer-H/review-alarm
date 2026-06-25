@@ -114,6 +114,21 @@ header span { font-size: 13px; color: #93c5fd; }
 .best-quote { font-size:15px; line-height:1.65; color:#1e293b; font-style:italic; }
 .best-meta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; border-top:1px solid #f1f5f9; margin-top:10px; padding-top:10px; }
 .best-attr { font-size:12px; color:#64748b; font-weight:600; }
+.ins-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:16px 18px; margin-bottom:12px; }
+.ins-head { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid #f1f5f9; }
+.ins-book { font-size:15px; font-weight:700; color:#0f2744; }
+.ins-meta { font-size:12px; color:#64748b; }
+.ins-stars { color:#f59e0b; letter-spacing:-1px; }
+.ins-sec { margin-bottom:10px; }
+.ins-sec:last-child { margin-bottom:0; }
+.ins-label { font-size:13px; font-weight:700; margin-bottom:5px; }
+.ins-good .ins-label { color:#15803d; }
+.ins-bad .ins-label { color:#b45309; }
+.ins-sec ul { margin:0; padding-left:18px; }
+.ins-sec li { font-size:13.5px; line-height:1.6; color:#334155; margin-bottom:3px; }
+.ins-bad li { color:#7c2d12; }
+.ins-none { list-style:none; color:#94a3b8; }
+.ins-clean { font-size:12.5px; color:#94a3b8; background:#f8fafc; border-radius:6px; padding:7px 10px; }
 .stat-card.clickable { cursor: pointer; transition: background .15s, box-shadow .15s; }
 .stat-card.clickable:hover { background: #fff1f1; box-shadow: 0 2px 10px rgba(220,38,38,.12); }
 .stat-card.alert .stat-sub { color: #dc2626; font-weight: 600; }
@@ -260,6 +275,7 @@ header span { font-size: 13px; color: #93c5fd; }
   <div class="tabs">
     <button class="tab active" data-tab="reviews" onclick="switchTab('reviews')">리뷰</button>
     <button class="tab" data-tab="best" onclick="switchTab('best')">📣 마케팅 문구 활용</button>
+    <button class="tab" data-tab="insight" onclick="switchTab('insight')">📊 인사이트</button>
   </div>
   <div id="tab-reviews">
     <div class="stats" id="stats" style="display:none"></div>
@@ -268,6 +284,7 @@ header span { font-size: 13px; color: #93c5fd; }
     </div>
   </div>
   <div id="tab-best" style="display:none"></div>
+  <div id="tab-insight" style="display:none"></div>
 </div>
 
 <script>
@@ -382,8 +399,10 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.getElementById('tab-reviews').style.display = name === 'reviews' ? '' : 'none';
   document.getElementById('tab-best').style.display = name === 'best' ? '' : 'none';
+  document.getElementById('tab-insight').style.display = name === 'insight' ? '' : 'none';
   document.querySelector('.toolbar').style.display = name === 'reviews' ? '' : 'none';
   if (name === 'best') renderBest();
+  if (name === 'insight') renderInsight();
 }
 
 // 후기 본문에서 협찬 고지·군더더기 제거 (무료, 문장 단위 정리)
@@ -448,6 +467,34 @@ function copyBest(btn) {
   navigator.clipboard.writeText(t).then(() => {
     const o = btn.textContent; btn.textContent = '복사됨'; setTimeout(() => btn.textContent = o, 1500);
   });
+}
+
+// 인사이트: book_insights.json(책별 칭찬 포인트 / 아쉬운 점 요약)을 표시
+let bookInsights = [];
+function renderInsight() {
+  const el = document.getElementById('tab-insight');
+  const all = bookInsights;
+  if (!all.length) {
+    el.innerHTML = `<div class="empty">아직 인사이트 데이터가 없습니다.</div>`;
+    return;
+  }
+  let html = `<div class="best-head">📊 책별 독자 반응 한눈에 <span class="best-count">${all.length}종</span></div>
+    <div class="best-note"><b>이렇게 정리했어요</b> — 책마다 실제 후기를 모아 <b>독자들이 자주 칭찬한 점</b>과 <b>아쉬워한 점</b>을 요약했습니다. 리뷰를 다 읽지 않아도 핵심을 파악하고, 칭찬 포인트는 마케팅에, 아쉬운 점은 개정·기획에 참고하세요. (후기 수가 적은 책은 표본이 작으니 참고만)</div>`;
+  all.forEach(b => {
+    const stars = '★'.repeat(Math.round(b.avg)) + '☆'.repeat(5 - Math.round(b.avg));
+    const praise = (b.praise || []).map(p => `<li>${p}</li>`).join('');
+    const cons = (b.cons || []).map(c => `<li>${c}</li>`).join('');
+    html += `<div class="ins-card">
+      <div class="ins-head">
+        <span class="ins-book">${b.book}</span>
+        <span class="ins-meta">후기 ${b.count}건 · 평균 <b>${b.avg}</b> <span class="ins-stars">${stars}</span></span>
+      </div>
+      <div class="ins-sec ins-good"><div class="ins-label">👍 자주 칭찬한 점</div><ul>${praise || '<li class="ins-none">—</li>'}</ul></div>
+      ${cons ? `<div class="ins-sec ins-bad"><div class="ins-label">⚠️ 아쉬워한 점</div><ul>${cons}</ul></div>`
+             : `<div class="ins-sec ins-clean">⚠️ 아쉬운 점으로 두드러진 의견 없음</div>`}
+    </div>`;
+  });
+  el.innerHTML = html;
 }
 
 // 비용 없이 유형별 추천 응대 문구(초안) 생성
@@ -620,6 +667,8 @@ async function load() {
 
     try { marketingQuotes = await (await fetch('marketing_quotes.json?_=' + Date.now())).json(); }
     catch (e) { marketingQuotes = []; }
+    try { bookInsights = await (await fetch('book_insights.json?_=' + Date.now())).json(); }
+    catch (e) { bookInsights = []; }
 
     const dates = [...new Set(allReviews.map(r=>r.date))].sort((a,b)=>b.localeCompare(a));
     dateCounts = {};
