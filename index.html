@@ -102,6 +102,16 @@ header span { font-size: 13px; color: #93c5fd; }
 .stat-card .stat-sub { font-size: 12px; color: #64748b; margin-top: 4px; }
 .stat-card.alert .stat-value { color: #dc2626; }
 .stat-card.alert { border-color: #fecaca; background: #fff8f8; }
+.tabs { display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; }
+.tab { padding:8px 16px; border:1px solid #e2e8f0; background:#fff; border-radius:8px; font-size:14px; font-weight:600; color:#64748b; cursor:pointer; }
+.tab.active { background:#0f2744; color:#fff; border-color:#0f2744; }
+.best-head { font-size:15px; font-weight:700; color:#0f2744; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+.best-count { background:#3b82f6; color:#fff; font-size:12px; padding:2px 9px; border-radius:11px; }
+.best-note { font-size:12px; color:#3730a3; background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px; padding:8px 11px; margin-bottom:14px; line-height:1.6; }
+.best-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px 18px 14px; margin-bottom:12px; }
+.best-quote { font-size:15px; line-height:1.65; color:#1e293b; font-style:italic; }
+.best-meta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; border-top:1px solid #f1f5f9; margin-top:10px; padding-top:10px; }
+.best-attr { font-size:12px; color:#64748b; font-weight:600; }
 .stat-card.clickable { cursor: pointer; transition: background .15s, box-shadow .15s; }
 .stat-card.clickable:hover { background: #fff1f1; box-shadow: 0 2px 10px rgba(220,38,38,.12); }
 .stat-card.alert .stat-sub { color: #dc2626; font-weight: 600; }
@@ -245,10 +255,17 @@ header span { font-size: 13px; color: #93c5fd; }
 </div>
 
 <div class="main">
-  <div class="stats" id="stats" style="display:none"></div>
-  <div id="content">
-    <div class="loading"><div class="spinner"></div>리뷰 데이터를 불러오는 중...</div>
+  <div class="tabs">
+    <button class="tab active" data-tab="reviews" onclick="switchTab('reviews')">리뷰</button>
+    <button class="tab" data-tab="best" onclick="switchTab('best')">📣 마케팅 문구 활용</button>
   </div>
+  <div id="tab-reviews">
+    <div class="stats" id="stats" style="display:none"></div>
+    <div id="content">
+      <div class="loading"><div class="spinner"></div>리뷰 데이터를 불러오는 중...</div>
+    </div>
+  </div>
+  <div id="tab-best" style="display:none"></div>
 </div>
 
 <script>
@@ -356,6 +373,74 @@ function scrollToActionNeeded() {
   resetFilters();  // 필터 걸려 있으면 해제해 섹션이 보이도록
   const el = document.querySelector('.action-needed');
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// 탭 전환 (리뷰 / 베스트 후기)
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.getElementById('tab-reviews').style.display = name === 'reviews' ? '' : 'none';
+  document.getElementById('tab-best').style.display = name === 'best' ? '' : 'none';
+  document.querySelector('.toolbar').style.display = name === 'reviews' ? '' : 'none';
+  if (name === 'best') renderBest();
+}
+
+// 후기 본문에서 협찬 고지·군더더기 제거 (무료, 문장 단위 정리)
+function cleanQuote(text, title) {
+  let t = (text || '').replace(/\r/g, ' ')
+    .replace(/\[[^\]]*리뷰\]/g, ' ')   // [일반 리뷰] 등
+    .replace(/#[^\s#]+/g, ' ');        // 해시태그
+  // 협찬·홍보성 단어가 든 문장은 통째로 제거
+  const bad = /(제공\s*받|지원\s*받|협찬|무상|서평\s*이벤트|체험단|증정|소정의|원고료)/;
+  t = t.split(/(?<=[.!?。])/).filter(s => !bad.test(s)).join(' ').replace(/\s+/g, ' ').trim();
+  // 맨 앞에 책 제목(+ '서평/리뷰/후기')이 그대로 붙어있으면 제거 (공백 유연 매칭)
+  if (title) {
+    const tt = title.trim().split(/\s+/).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
+    t = t.replace(new RegExp('^' + tt + '\\s*(서평|리뷰|후기)?[\\s:·\\-]*'), '').trim();
+  }
+  return t.replace(/\s+/g, ' ').trim();
+}
+// 너무 길면 문장 단위로 잘라 인용구 길이로
+function snippetOf(t, max) {
+  if (t.length <= max) return t;
+  const s = t.slice(0, max);
+  const i = s.lastIndexOf('.');
+  return i > max * 0.4 ? s.slice(0, i + 1).trim() : s.trim() + '…';
+}
+
+// 마케팅 문구: ★4.5 이상 + 정리 후 40자 이상, 최신순
+function renderBest() {
+  const el = document.getElementById('tab-best');
+  const best = allReviews
+    .map(r => ({ r, q: cleanQuote(r.text, (r.title || '').split('|')[0].trim()) }))
+    .filter(x => { const n = parseRating(x.r.rating); return n !== null && n >= 4.5 && x.q.length >= 40; })
+    .sort((a, b) => b.r.date.localeCompare(a.r.date));
+  if (!best.length) {
+    el.innerHTML = `<div class="empty">아직 표시할 후기가 없습니다.</div>`;
+    return;
+  }
+  let html = `<div class="best-head">📣 마케팅 문구로 쓰기 좋은 후기 <span class="best-count">${best.length}</span></div>
+    <div class="best-note">협찬 고지·군더더기는 자동으로 정리했어요. <b>문구 복사</b>를 누르면 출처까지 붙어 복사됩니다.</div>`;
+  best.forEach(({ r, q }) => {
+    const title = (r.title || '').split('|')[0].trim();
+    const n = parseRating(r.rating);
+    const snip = snippetOf(q, 160);
+    const copyStr = `"${snip}" — 《${title}》 독자 후기 (${storeLabel(r.store)} ⭐${n})`;
+    html += `<div class="best-card">
+      <div class="best-quote">“${snip}”</div>
+      <div class="best-meta">
+        <span class="best-attr">《${title}》 · ${storeLabel(r.store)} ⭐${n}점 · ${r.reviewer || ''}</span>
+        <button class="an-copy" style="margin-left:auto" onclick="copyBest(this)">📋 문구 복사</button>
+      </div>
+      <div class="best-copy" style="display:none">${copyStr}</div>
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+function copyBest(btn) {
+  const t = btn.closest('.best-card').querySelector('.best-copy').textContent;
+  navigator.clipboard.writeText(t).then(() => {
+    const o = btn.textContent; btn.textContent = '복사됨'; setTimeout(() => btn.textContent = o, 1500);
+  });
 }
 
 // 비용 없이 유형별 추천 응대 문구(초안) 생성
