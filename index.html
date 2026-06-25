@@ -107,6 +107,8 @@ header span { font-size: 13px; color: #93c5fd; }
 .tab.active { background:#0f2744; color:#fff; border-color:#0f2744; }
 .best-head { font-size:15px; font-weight:700; color:#0f2744; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
 .best-count { background:#3b82f6; color:#fff; font-size:12px; padding:2px 9px; border-radius:11px; }
+.best-toolbar { margin-bottom:12px; }
+.best-toolbar select { padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; background:#fff; color:#1e293b; max-width:100%; cursor:pointer; }
 .best-note { font-size:12px; color:#3730a3; background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px; padding:8px 11px; margin-bottom:14px; line-height:1.6; }
 .best-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px 18px 14px; margin-bottom:12px; }
 .best-quote { font-size:15px; line-height:1.65; color:#1e293b; font-style:italic; }
@@ -407,28 +409,36 @@ function snippetOf(t, max) {
   return i > max * 0.4 ? s.slice(0, i + 1).trim() : s.trim() + '…';
 }
 
-// 마케팅 문구: ★4.5 이상 + 정리 후 40자 이상, 최신순
+// 마케팅 문구: ★4.5 이상 + 정리 후 40자 이상, 책별 필터 + 최신순
+let bestBook = '';
 function renderBest() {
   const el = document.getElementById('tab-best');
-  const best = allReviews
-    .map(r => ({ r, q: cleanQuote(r.text, (r.title || '').split('|')[0].trim()) }))
+  const all = allReviews
+    .map(r => ({ r, q: cleanQuote(r.text, (r.title || '').split('|')[0].trim()), book: (r.title || '').split('|')[0].trim() }))
     .filter(x => { const n = parseRating(x.r.rating); return n !== null && n >= 4.5 && x.q.length >= 40; })
     .sort((a, b) => b.r.date.localeCompare(a.r.date));
-  if (!best.length) {
+  if (!all.length) {
     el.innerHTML = `<div class="empty">아직 표시할 후기가 없습니다.</div>`;
     return;
   }
-  let html = `<div class="best-head">📣 마케팅 문구로 쓰기 좋은 후기 <span class="best-count">${best.length}</span></div>
+  const counts = {};
+  all.forEach(x => counts[x.book] = (counts[x.book] || 0) + 1);
+  const books = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  if (bestBook && !counts[bestBook]) bestBook = '';
+  const shown = bestBook ? all.filter(x => x.book === bestBook) : all;
+  const opts = `<option value="">📚 전체 도서 (${all.length})</option>` +
+    books.map(b => `<option value="${b.replace(/"/g, '&quot;')}"${b === bestBook ? ' selected' : ''}>${b} (${counts[b]})</option>`).join('');
+  let html = `<div class="best-head">📣 마케팅 문구로 쓰기 좋은 후기 <span class="best-count">${shown.length}</span></div>
+    <div class="best-toolbar"><select id="best-book" onchange="bestBook=this.value; renderBest()">${opts}</select></div>
     <div class="best-note">협찬 고지·군더더기는 자동으로 정리했어요. <b>문구 복사</b>를 누르면 출처까지 붙어 복사됩니다.</div>`;
-  best.forEach(({ r, q }) => {
-    const title = (r.title || '').split('|')[0].trim();
+  shown.forEach(({ r, q, book }) => {
     const n = parseRating(r.rating);
     const snip = snippetOf(q, 160);
-    const copyStr = `"${snip}" — 《${title}》 독자 후기 (${storeLabel(r.store)} ⭐${n})`;
+    const copyStr = `"${snip}" — 《${book}》 독자 후기 (${storeLabel(r.store)} ⭐${n})`;
     html += `<div class="best-card">
       <div class="best-quote">“${snip}”</div>
       <div class="best-meta">
-        <span class="best-attr">《${title}》 · ${storeLabel(r.store)} ⭐${n}점 · ${r.reviewer || ''}</span>
+        <span class="best-attr">《${book}》 · ${storeLabel(r.store)} ⭐${n}점 · ${r.reviewer || ''}</span>
         <button class="an-copy" style="margin-left:auto" onclick="copyBest(this)">📋 문구 복사</button>
       </div>
       <div class="best-copy" style="display:none">${copyStr}</div>
