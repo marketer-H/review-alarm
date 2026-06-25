@@ -112,6 +112,15 @@ header span { font-size: 13px; color: #93c5fd; }
 .ins-toolbar { display:flex; gap:8px; flex-wrap:wrap; }
 .ins-toolbar input { flex:1 1 200px; min-width:160px; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; color:#1e293b; }
 .ins-toolbar input:focus { outline:none; border-color:#3b82f6; }
+.ins-clear { padding:8px 14px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; color:#475569; font-size:13px; cursor:pointer; white-space:nowrap; }
+.ins-clear:hover { background:#f1f5f9; }
+.ins-chips { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 4px; }
+.ins-chip { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border:1px solid #e2e8f0; border-radius:16px; font-size:12.5px; color:#334155; background:#fff; cursor:pointer; user-select:none; }
+.ins-chip:hover { border-color:#cbd5e1; }
+.ins-chip.on { background:#eff6ff; border-color:#3b82f6; color:#1d4ed8; font-weight:600; }
+.ins-chip input { cursor:pointer; margin:0; }
+.ins-chip-n { color:#94a3b8; font-size:11px; }
+.ins-chip.on .ins-chip-n { color:#60a5fa; }
 .best-note { font-size:12px; color:#3730a3; background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px; padding:8px 11px; margin-bottom:14px; line-height:1.6; }
 .best-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px 18px 14px; margin-bottom:12px; }
 .best-quote { font-size:15px; line-height:1.65; color:#1e293b; font-style:italic; }
@@ -474,46 +483,58 @@ function copyBest(btn) {
 
 // 인사이트: book_insights.json(책별 칭찬 포인트 / 아쉬운 점 요약)을 표시
 let bookInsights = [];
-let insightBook = '';
 let insightQuery = '';
+let insightChecked = new Set();
 function renderInsight() {
   const el = document.getElementById('tab-insight');
   if (!bookInsights.length) {
     el.innerHTML = `<div class="empty">아직 인사이트 데이터가 없습니다.</div>`;
     return;
   }
-  insightBook = ''; insightQuery = '';   // 탭 열 때 필터 초기화
-  const opts = `<option value="">📚 전체 도서 (${bookInsights.length}종)</option>` +
-    bookInsights.map(b => `<option value="${b.book.replace(/"/g, '&quot;')}">${b.book} (${b.count}건)</option>`).join('');
+  insightQuery = ''; insightChecked = new Set();   // 탭 열 때 초기화
   el.innerHTML = `<div class="best-head">📊 책별 독자 반응 한눈에 <span class="best-count" id="insight-count">${bookInsights.length}종</span></div>
     <div class="best-toolbar ins-toolbar">
       <input id="insight-search" type="text" placeholder="🔍 책 제목 검색…" oninput="insightSearch(this.value)">
-      <select id="insight-book" onchange="insightPick(this.value)">${opts}</select>
+      <button class="ins-clear" onclick="insightClearAll()">선택 해제</button>
     </div>
-    <div class="best-note"><b>이렇게 정리했어요</b> — 책마다 실제 후기를 모아 <b>독자들이 자주 칭찬한 점</b>과 <b>아쉬워한 점</b>을 요약했습니다. 리뷰를 다 읽지 않아도 핵심을 파악하고, 칭찬 포인트는 마케팅에, 아쉬운 점은 개정·기획에 참고하세요. (후기 수가 적은 책은 표본이 작으니 참고만)</div>
+    <div class="best-note"><b>이렇게 정리했어요</b> — 책마다 실제 후기를 모아 <b>독자들이 자주 칭찬한 점</b>과 <b>아쉬워한 점</b>을 요약했습니다. 보고 싶은 책을 <b>체크하면(여러 권 동시 선택 가능)</b> 해당 책만 모아 볼 수 있어요. 칭찬 포인트는 마케팅에, 아쉬운 점은 개정·기획에 참고하세요.</div>
+    <div id="insight-checks" class="ins-chips"></div>
     <div id="insight-cards"></div>`;
+  renderInsightChecks();
   renderInsightCards();
 }
-// 검색(입력) — 카드만 갱신해 입력칸 포커스 유지
-function insightSearch(v) {
-  insightQuery = v; insightBook = '';
-  const s = document.getElementById('insight-book'); if (s) s.value = '';
+// 검색(입력) — 체크목록/카드만 갱신해 입력칸 포커스 유지
+function insightSearch(v) { insightQuery = v; renderInsightChecks(); renderInsightCards(); }
+// 체크박스 토글 (중복 선택 가능)
+function insightToggle(cb) {
+  const b = cb.dataset.book;
+  if (cb.checked) insightChecked.add(b); else insightChecked.delete(b);
+  const chip = cb.closest('.ins-chip'); if (chip) chip.classList.toggle('on', cb.checked);
   renderInsightCards();
 }
-// 드롭다운 선택
-function insightPick(v) {
-  insightBook = v; insightQuery = '';
-  const i = document.getElementById('insight-search'); if (i) i.value = '';
+function insightClearAll() {
+  insightChecked = new Set();
+  document.querySelectorAll('#insight-checks .ins-cb').forEach(c => c.checked = false);
+  document.querySelectorAll('#insight-checks .ins-chip').forEach(c => c.classList.remove('on'));
   renderInsightCards();
+}
+function renderInsightChecks() {
+  const q = insightQuery.trim().toLowerCase();
+  const books = bookInsights.filter(b => !q || b.book.toLowerCase().includes(q));
+  const wrap = document.getElementById('insight-checks');
+  wrap.innerHTML = books.map(b => {
+    const on = insightChecked.has(b.book);
+    return `<label class="ins-chip${on ? ' on' : ''}"><input type="checkbox" class="ins-cb" data-book="${b.book.replace(/"/g, '&quot;')}"${on ? ' checked' : ''} onchange="insightToggle(this)"> ${b.book} <span class="ins-chip-n">${b.count}</span></label>`;
+  }).join('') || `<span class="ins-none">검색 결과가 없습니다.</span>`;
 }
 function renderInsightCards() {
-  let list = bookInsights;
   const q = insightQuery.trim().toLowerCase();
-  if (q) list = list.filter(b => b.book.toLowerCase().includes(q));
-  else if (insightBook) list = list.filter(b => b.book === insightBook);
+  let list = bookInsights;
+  if (insightChecked.size) list = list.filter(b => insightChecked.has(b.book));
+  else if (q) list = list.filter(b => b.book.toLowerCase().includes(q));
   const cnt = document.getElementById('insight-count'); if (cnt) cnt.textContent = list.length + '종';
   const wrap = document.getElementById('insight-cards');
-  if (!list.length) { wrap.innerHTML = `<div class="empty">검색 결과가 없습니다.</div>`; return; }
+  if (!list.length) { wrap.innerHTML = `<div class="empty">표시할 책이 없습니다.</div>`; return; }
   let html = '';
   list.forEach(b => {
     const stars = '★'.repeat(Math.round(b.avg)) + '☆'.repeat(5 - Math.round(b.avg));
