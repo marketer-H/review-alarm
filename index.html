@@ -430,7 +430,7 @@ function renderBest() {
     books.map(b => `<option value="${b.replace(/"/g, '&quot;')}"${b === bestBook ? ' selected' : ''}>${b} (${counts[b]})</option>`).join('');
   let html = `<div class="best-head">📣 마케팅 문구로 쓰기 좋은 후기 <span class="best-count">${shown.length}</span></div>
     <div class="best-toolbar"><select id="best-book" onchange="bestBook=this.value; renderBest()">${opts}</select></div>
-    <div class="best-note">협찬 고지·군더더기는 자동으로 정리했어요. <b>문구 복사</b>를 누르면 출처까지 붙어 복사됩니다.</div>`;
+    <div class="best-note"><b>선정 기준</b> — 별점 ★4.5 이상 + 내용 있는 후기(40자 이상)만 모았습니다. 협찬 고지·군더더기는 자동 정리했고, <b>문구 복사</b>를 누르면 출처까지 붙어 복사됩니다.</div>`;
   shown.forEach(({ r, q, book }) => {
     const n = parseRating(r.rating);
     const snip = snippetOf(q, 160);
