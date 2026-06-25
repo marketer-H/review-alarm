@@ -109,18 +109,27 @@ header span { font-size: 13px; color: #93c5fd; }
 .best-count { background:#3b82f6; color:#fff; font-size:12px; padding:2px 9px; border-radius:11px; }
 .best-toolbar { margin-bottom:12px; }
 .best-toolbar select { padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; background:#fff; color:#1e293b; max-width:100%; cursor:pointer; }
-.ins-toolbar { display:flex; gap:8px; flex-wrap:wrap; }
-.ins-toolbar input { flex:1 1 200px; min-width:160px; padding:8px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; color:#1e293b; }
-.ins-toolbar input:focus { outline:none; border-color:#3b82f6; }
-.ins-clear { padding:8px 14px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; color:#475569; font-size:13px; cursor:pointer; white-space:nowrap; }
-.ins-clear:hover { background:#f1f5f9; }
-.ins-chips { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 4px; }
-.ins-chip { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border:1px solid #e2e8f0; border-radius:16px; font-size:12.5px; color:#334155; background:#fff; cursor:pointer; user-select:none; }
-.ins-chip:hover { border-color:#cbd5e1; }
-.ins-chip.on { background:#eff6ff; border-color:#3b82f6; color:#1d4ed8; font-weight:600; }
-.ins-chip input { cursor:pointer; margin:0; }
-.ins-chip-n { color:#94a3b8; font-size:11px; }
-.ins-chip.on .ins-chip-n { color:#60a5fa; }
+/* 책 다중선택 드롭다운 */
+.ms { position:relative; margin-bottom:14px; max-width:340px; }
+.ms-btn { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; padding:9px 14px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; color:#1e293b; font-size:14px; cursor:pointer; }
+.ms-btn:hover { border-color:#cbd5e1; }
+.ms-caret { color:#94a3b8; font-size:12px; }
+.ms-panel { position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:30; background:#fff; border:1px solid #e2e8f0; border-radius:10px; box-shadow:0 8px 24px rgba(15,39,68,.12); padding:8px; }
+.ms-search { width:100%; box-sizing:border-box; padding:8px 11px; border:1px solid #e2e8f0; border-radius:7px; font-size:13.5px; color:#1e293b; }
+.ms-search:focus { outline:none; border-color:#3b82f6; }
+.ms-actions { display:flex; align-items:center; justify-content:space-between; padding:7px 2px 5px; }
+.ms-hint { font-size:11.5px; color:#94a3b8; }
+.ms-clear { padding:3px 10px; border:1px solid #e2e8f0; border-radius:6px; background:#fff; color:#475569; font-size:12px; cursor:pointer; }
+.ms-clear:hover { background:#f1f5f9; }
+.ms-list { max-height:260px; overflow-y:auto; }
+.ms-row { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:6px; font-size:13px; color:#334155; cursor:pointer; }
+.ms-row:hover { background:#f8fafc; }
+.ms-row.on { background:#eff6ff; color:#1d4ed8; font-weight:600; }
+.ms-row input { cursor:pointer; margin:0; flex:none; }
+.ms-row-name { flex:1; }
+.ms-row-n { color:#94a3b8; font-size:11px; }
+.ms-row.on .ms-row-n { color:#60a5fa; }
+.ms-empty { padding:10px 8px; color:#94a3b8; font-size:13px; }
 .best-note { font-size:12px; color:#3730a3; background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px; padding:8px 11px; margin-bottom:14px; line-height:1.6; }
 .best-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px 18px 14px; margin-bottom:12px; }
 .best-quote { font-size:15px; line-height:1.65; color:#1e293b; font-style:italic; }
@@ -417,49 +426,73 @@ function switchTab(name) {
   if (name === 'insight') renderInsight();
 }
 
-// 후기 본문에서 협찬 고지·군더더기 제거 (무료, 문장 단위 정리)
-function cleanQuote(text, title) {
-  let t = (text || '').replace(/\r/g, ' ')
-    .replace(/\[[^\]]*리뷰\]/g, ' ')   // [일반 리뷰] 등
-    .replace(/#[^\s#]+/g, ' ');        // 해시태그
-  // 협찬·홍보성 단어가 든 문장은 통째로 제거
-  const bad = /(제공\s*받|지원\s*받|협찬|무상|서평\s*이벤트|체험단|증정|소정의|원고료)/;
-  t = t.split(/(?<=[.!?。])/).filter(s => !bad.test(s)).join(' ').replace(/\s+/g, ' ').trim();
-  // 맨 앞에 책 제목(+ '서평/리뷰/후기')이 그대로 붙어있으면 제거 (공백 유연 매칭)
-  if (title) {
-    const tt = title.trim().split(/\s+/).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
-    t = t.replace(new RegExp('^' + tt + '\\s*(서평|리뷰|후기)?[\\s:·\\-]*'), '').trim();
-  }
-  return t.replace(/\s+/g, ' ').trim();
-}
-// 너무 길면 문장 단위로 잘라 인용구 길이로
-function snippetOf(t, max) {
-  if (t.length <= max) return t;
-  const s = t.slice(0, max);
-  const i = s.lastIndexOf('.');
-  return i > max * 0.4 ? s.slice(0, i + 1).trim() : s.trim() + '…';
+// 책 다중선택 드롭다운 패널 토글 (인사이트·마케팅 공용)
+function msToggle(id) {
+  const p = document.getElementById(id);
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
 }
 
-// 마케팅 문구: marketing_quotes.json(사람이 엄선·정리한 추천 문구)을 책별로 표시
-let bestBook = '';
+// 마케팅 문구: marketing_quotes.json(사람이 엄선·정리한 추천 문구), 책 다중선택
 let marketingQuotes = [];
+let bestChecked = new Set();
+let bestQuery = '';
+function bestBooksList() {
+  const c = {}; marketingQuotes.forEach(x => c[x.book] = (c[x.book] || 0) + 1);
+  return Object.keys(c).sort((a, b) => c[b] - c[a]).map(b => ({ book: b, count: c[b] }));
+}
 function renderBest() {
   const el = document.getElementById('tab-best');
-  const all = marketingQuotes;
-  if (!all.length) {
+  if (!marketingQuotes.length) {
     el.innerHTML = `<div class="empty">아직 마케팅 추천 문구가 없습니다.</div>`;
     return;
   }
-  const counts = {};
-  all.forEach(x => counts[x.book] = (counts[x.book] || 0) + 1);
-  const books = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-  if (bestBook && !counts[bestBook]) bestBook = '';
-  const shown = bestBook ? all.filter(x => x.book === bestBook) : all;
-  const opts = `<option value="">📚 전체 도서 (${all.length})</option>` +
-    books.map(b => `<option value="${b.replace(/"/g, '&quot;')}"${b === bestBook ? ' selected' : ''}>${b} (${counts[b]})</option>`).join('');
-  let html = `<div class="best-head">📣 마케팅 문구로 쓰기 좋은 후기 <span class="best-count">${shown.length}</span></div>
-    <div class="best-toolbar"><select id="best-book" onchange="bestBook=this.value; renderBest()">${opts}</select></div>
-    <div class="best-note"><b>이렇게 골랐어요</b> — 실제 독자 후기 중 <b>구체적이고 설득력 있는 문장</b>만 추려, 협찬 고지·군더더기를 정리해 다듬은 추천 카피입니다. <b>문구 복사</b>를 누르면 출처까지 붙어 복사돼요. (SNS·상세페이지·카드뉴스에 바로 활용)</div>`;
+  bestQuery = ''; bestChecked = new Set();
+  el.innerHTML = `<div class="best-head">📣 마케팅 문구로 쓰기 좋은 후기 <span class="best-count" id="best-count">${marketingQuotes.length}</span></div>
+    <div class="ms" id="best-ms">
+      <button class="ms-btn" onclick="msToggle('best-ms-panel')"><span id="best-ms-label">📚 전체 도서</span><span class="ms-caret">▾</span></button>
+      <div class="ms-panel" id="best-ms-panel" style="display:none">
+        <input class="ms-search" type="text" placeholder="🔍 책 제목 검색…" oninput="bestSearch(this.value)">
+        <div class="ms-actions"><span class="ms-hint">여러 권 선택 가능</span><button class="ms-clear" onclick="bestClearAll()">선택 해제</button></div>
+        <div id="best-checks" class="ms-list"></div>
+      </div>
+    </div>
+    <div class="best-note"><b>이렇게 골랐어요</b> — 실제 독자 후기 중 <b>구체적이고 설득력 있는 문장</b>만 추려, 협찬 고지·군더더기를 정리해 다듬은 추천 카피입니다. <b>문구 복사</b>를 누르면 출처까지 붙어 복사돼요. (SNS·상세페이지·카드뉴스에 바로 활용)</div>
+    <div id="best-cards"></div>`;
+  renderBestChecks();
+  renderBestCards();
+}
+function bestSearch(v) { bestQuery = v; renderBestChecks(); }
+function bestToggle(cb) {
+  const b = cb.dataset.book;
+  if (cb.checked) bestChecked.add(b); else bestChecked.delete(b);
+  const r = cb.closest('.ms-row'); if (r) r.classList.toggle('on', cb.checked);
+  bestUpdateLabel(); renderBestCards();
+}
+function bestClearAll() {
+  bestChecked = new Set();
+  document.querySelectorAll('#best-checks .ms-cb').forEach(c => c.checked = false);
+  document.querySelectorAll('#best-checks .ms-row').forEach(c => c.classList.remove('on'));
+  bestUpdateLabel(); renderBestCards();
+}
+function bestUpdateLabel() {
+  const l = document.getElementById('best-ms-label'); const n = bestChecked.size;
+  l.textContent = n === 0 ? '📚 전체 도서' : (n === 1 ? [...bestChecked][0] : `${n}권 선택됨`);
+}
+function renderBestChecks() {
+  const q = bestQuery.trim().toLowerCase();
+  const books = bestBooksList().filter(b => !q || b.book.toLowerCase().includes(q));
+  const wrap = document.getElementById('best-checks');
+  wrap.innerHTML = books.map(b => {
+    const on = bestChecked.has(b.book);
+    return `<label class="ms-row${on ? ' on' : ''}"><input type="checkbox" class="ms-cb" data-book="${b.book.replace(/"/g, '&quot;')}"${on ? ' checked' : ''} onchange="bestToggle(this)"><span class="ms-row-name">${b.book}</span><span class="ms-row-n">${b.count}</span></label>`;
+  }).join('') || `<div class="ms-empty">검색 결과가 없습니다.</div>`;
+}
+function renderBestCards() {
+  const shown = bestChecked.size ? marketingQuotes.filter(x => bestChecked.has(x.book)) : marketingQuotes;
+  const cnt = document.getElementById('best-count'); if (cnt) cnt.textContent = shown.length;
+  const wrap = document.getElementById('best-cards');
+  if (!shown.length) { wrap.innerHTML = `<div class="empty">표시할 문구가 없습니다.</div>`; return; }
+  let html = '';
   shown.forEach(x => {
     const n = x.rating || 5;
     const copyStr = `"${x.quote}" — 《${x.book}》 독자 후기 (${storeLabel(x.store)} ⭐${n})`;
@@ -472,7 +505,7 @@ function renderBest() {
       <div class="best-copy" style="display:none">${copyStr}</div>
     </div>`;
   });
-  el.innerHTML = html;
+  wrap.innerHTML = html;
 }
 function copyBest(btn) {
   const t = btn.closest('.best-card').querySelector('.best-copy').textContent;
@@ -493,30 +526,35 @@ function renderInsight() {
   }
   insightQuery = ''; insightChecked = new Set();   // 탭 열 때 초기화
   el.innerHTML = `<div class="best-head">📊 책별 독자 반응 한눈에 <span class="best-count" id="insight-count">${bookInsights.length}종</span></div>
-    <div class="best-toolbar ins-toolbar">
-      <input id="insight-search" type="text" placeholder="🔍 책 제목 검색…" oninput="insightSearch(this.value)">
-      <button class="ins-clear" onclick="insightClearAll()">선택 해제</button>
+    <div class="ms" id="insight-ms">
+      <button class="ms-btn" onclick="msToggle('insight-ms-panel')"><span id="insight-ms-label">📚 전체 도서</span><span class="ms-caret">▾</span></button>
+      <div class="ms-panel" id="insight-ms-panel" style="display:none">
+        <input class="ms-search" type="text" placeholder="🔍 책 제목 검색…" oninput="insightSearch(this.value)">
+        <div class="ms-actions"><span class="ms-hint">여러 권 선택 가능</span><button class="ms-clear" onclick="insightClearAll()">선택 해제</button></div>
+        <div id="insight-checks" class="ms-list"></div>
+      </div>
     </div>
-    <div class="best-note"><b>이렇게 정리했어요</b> — 책마다 실제 후기를 모아 <b>독자들이 자주 칭찬한 점</b>과 <b>아쉬워한 점</b>을 요약했습니다. 보고 싶은 책을 <b>체크하면(여러 권 동시 선택 가능)</b> 해당 책만 모아 볼 수 있어요. 칭찬 포인트는 마케팅에, 아쉬운 점은 개정·기획에 참고하세요.</div>
-    <div id="insight-checks" class="ins-chips"></div>
+    <div class="best-note"><b>이렇게 정리했어요</b> — 책마다 실제 후기를 모아 <b>독자들이 자주 칭찬한 점</b>과 <b>아쉬워한 점</b>을 요약했습니다. 보고 싶은 책을 <b>골라(여러 권 동시 선택 가능)</b> 모아 볼 수 있어요. 칭찬 포인트는 마케팅에, 아쉬운 점은 개정·기획에 참고하세요.</div>
     <div id="insight-cards"></div>`;
   renderInsightChecks();
   renderInsightCards();
 }
-// 검색(입력) — 체크목록/카드만 갱신해 입력칸 포커스 유지
-function insightSearch(v) { insightQuery = v; renderInsightChecks(); renderInsightCards(); }
-// 체크박스 토글 (중복 선택 가능)
+function insightSearch(v) { insightQuery = v; renderInsightChecks(); }
 function insightToggle(cb) {
   const b = cb.dataset.book;
   if (cb.checked) insightChecked.add(b); else insightChecked.delete(b);
-  const chip = cb.closest('.ins-chip'); if (chip) chip.classList.toggle('on', cb.checked);
-  renderInsightCards();
+  const r = cb.closest('.ms-row'); if (r) r.classList.toggle('on', cb.checked);
+  insightUpdateLabel(); renderInsightCards();
 }
 function insightClearAll() {
   insightChecked = new Set();
-  document.querySelectorAll('#insight-checks .ins-cb').forEach(c => c.checked = false);
-  document.querySelectorAll('#insight-checks .ins-chip').forEach(c => c.classList.remove('on'));
-  renderInsightCards();
+  document.querySelectorAll('#insight-checks .ms-cb').forEach(c => c.checked = false);
+  document.querySelectorAll('#insight-checks .ms-row').forEach(c => c.classList.remove('on'));
+  insightUpdateLabel(); renderInsightCards();
+}
+function insightUpdateLabel() {
+  const l = document.getElementById('insight-ms-label'); const n = insightChecked.size;
+  l.textContent = n === 0 ? '📚 전체 도서' : (n === 1 ? [...insightChecked][0] : `${n}권 선택됨`);
 }
 function renderInsightChecks() {
   const q = insightQuery.trim().toLowerCase();
@@ -524,8 +562,8 @@ function renderInsightChecks() {
   const wrap = document.getElementById('insight-checks');
   wrap.innerHTML = books.map(b => {
     const on = insightChecked.has(b.book);
-    return `<label class="ins-chip${on ? ' on' : ''}"><input type="checkbox" class="ins-cb" data-book="${b.book.replace(/"/g, '&quot;')}"${on ? ' checked' : ''} onchange="insightToggle(this)"> ${b.book} <span class="ins-chip-n">${b.count}</span></label>`;
-  }).join('') || `<span class="ins-none">검색 결과가 없습니다.</span>`;
+    return `<label class="ms-row${on ? ' on' : ''}"><input type="checkbox" class="ms-cb" data-book="${b.book.replace(/"/g, '&quot;')}"${on ? ' checked' : ''} onchange="insightToggle(this)"><span class="ms-row-name">${b.book}</span><span class="ms-row-n">${b.count}</span></label>`;
+  }).join('') || `<div class="ms-empty">검색 결과가 없습니다.</div>`;
 }
 function renderInsightCards() {
   const q = insightQuery.trim().toLowerCase();
@@ -749,6 +787,11 @@ async function load() {
 document.getElementById('search').addEventListener('input', applyFilters);
 document.getElementById('store-filter').addEventListener('change', applyFilters);
 document.getElementById('reset-filters').addEventListener('click', resetFilters);
+
+// 드롭다운 패널 바깥 클릭 시 닫기
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.ms')) document.querySelectorAll('.ms-panel').forEach(p => p.style.display = 'none');
+});
 
 document.getElementById('date-btn').addEventListener('click', () => {
   const cal = document.getElementById('calendar');
