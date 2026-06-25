@@ -471,14 +471,20 @@ function copyBest(btn) {
 
 // 인사이트: book_insights.json(책별 칭찬 포인트 / 아쉬운 점 요약)을 표시
 let bookInsights = [];
+let insightBook = '';
 function renderInsight() {
   const el = document.getElementById('tab-insight');
-  const all = bookInsights;
-  if (!all.length) {
+  const allBooks = bookInsights;
+  if (!allBooks.length) {
     el.innerHTML = `<div class="empty">아직 인사이트 데이터가 없습니다.</div>`;
     return;
   }
+  if (insightBook && !allBooks.some(b => b.book === insightBook)) insightBook = '';
+  const all = insightBook ? allBooks.filter(b => b.book === insightBook) : allBooks;
+  const opts = `<option value="">📚 전체 도서 (${allBooks.length}종)</option>` +
+    allBooks.map(b => `<option value="${b.book.replace(/"/g, '&quot;')}"${b.book === insightBook ? ' selected' : ''}>${b.book} (${b.count}건)</option>`).join('');
   let html = `<div class="best-head">📊 책별 독자 반응 한눈에 <span class="best-count">${all.length}종</span></div>
+    <div class="best-toolbar"><select id="insight-book" onchange="insightBook=this.value; renderInsight()">${opts}</select></div>
     <div class="best-note"><b>이렇게 정리했어요</b> — 책마다 실제 후기를 모아 <b>독자들이 자주 칭찬한 점</b>과 <b>아쉬워한 점</b>을 요약했습니다. 리뷰를 다 읽지 않아도 핵심을 파악하고, 칭찬 포인트는 마케팅에, 아쉬운 점은 개정·기획에 참고하세요. (후기 수가 적은 책은 표본이 작으니 참고만)</div>`;
   all.forEach(b => {
     const stars = '★'.repeat(Math.round(b.avg)) + '☆'.repeat(5 - Math.round(b.avg));
