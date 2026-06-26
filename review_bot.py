@@ -636,6 +636,125 @@ def send_discord_no_reviews(webhook_url: str):
             print(f"[Discord] 오류: {e}")
 
 
+# ─── 주간 요약 (금요일 발송) ─────────────────────────────────────────
+def _summary_clean(text: str) -> str:
+    """주간 요약·주목 후기용 간단 정리: [~리뷰] 태그·협찬 고지 문장 제거."""
+    t = re.sub(r"\[[^\]]*리뷰\]", " ", text or "")
+    bad = re.compile(r"(제공\s*받|지원\s*받|협찬|무상|서평\s*이벤트|체험단|증정|소정의|원고료)")
+    t = " ".join(s for s in re.split(r"(?<=[.!?。])", t) if not bad.search(s))
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def build_weekly_summary_embed():
+    """reviews_log.json에서 최근 7일치를 집계해 주간 요약 embed 생성. 데이터 없으면 None."""
+    if not REVIEWS_LOG_FILE.exists():
+        return None
+    with open(REVIEWS_LOG_FILE) as f:
+        log = json.load(f)
+
+    from collections import Counter
+    today = datetime.now(KST).date()
+    start = today - timedelta(days=6)
+    wk = []
+    for r in log:
+        try:
+            d = date.fromisoformat(r.get("date", ""))
+        except ValueError:
+            continue
+        if start <= d <= today:
+            wk.append(r)
+    if not wk:
+        return None
+
+    sc = Counter(r.get("store", "") for r in wk)
+    ratings = [x for x in (rating_to_5(r.get("rating")) for r in wk) if x is not None]
+    avg = round(sum(ratings) / len(ratings), 2) if ratings else None
+    books = Counter((r.get("title") or "").split("|")[0].strip() for r in wk)
+    low = [r for r in wk if (rating_to_5(r.get("rating")) or 5) <= 2]
+
+    lines = [f"새 리뷰 **{len(wk)}건**" + (f" · 평균 ⭐**{avg}**" if avg is not None else "")]
+    store_line = " · ".join(
+        f"{STORE_EMOJI.get(s, '▪️')} {STORE_NAMES.get(s, s)} {c}" for s, c in sc.most_common()
+    )
+    if store_line:
+        lines.append(f"└ {store_line}")
+
+    if low:
+        lines.append(f"\n🚨 **대응 필요(★2 이하) {len(low)}건**")
+        for r in low[:5]:
+            t = (r.get("title") or "").split("|")[0].strip()
+            snip = _summary_clean(r.get("text", ""))[:50]
+            lines.append(f"• 《{t[:24]}》 ★{rating_to_5(r.get('rating'))} — {snip}…")
+        if len(low) > 5:
+            lines.append(f"…외 {len(low) - 5}건")
+    else:
+        lines.append("\n🚨 대응 필요(★2 이하): **0건** 👍")
+
+    top = books.most_common(3)
+    if top:
+        lines.append("\n📚 **리뷰 많은 책 TOP**")
+        medal = ["①", "②", "③"]
+        for i, (b, c) in enumerate(top):
+            lines.append(f"{medal[i]} {b[:28]} — {c}건")
+
+    # 주목 후기: 이번 주 리뷰가 많은 책의 '엄선 마케팅 문구' 우선, 없으면 원문에서 추출
+    highlight = None
+    mq_file = BASE_DIR / "marketing_quotes.json"
+    if mq_file.exists():
+        try:
+            with open(mq_file) as f:
+                mq = json.load(f)
+            for b, _ in books.most_common():
+                cand = next((q for q in mq if q.get("book") == b), None)
+                if cand:
+                    highlight = f"\"{cand.get('quote', '')}\" — 《{b[:24]}》 ⭐{cand.get('rating', 5)}"
+                    break
+        except Exception:
+            pass
+    if not highlight:
+        for r in sorted(
+            (r for r in wk if (rating_to_5(r.get("rating")) or 0) >= 4.5),
+            key=lambda r: len(_summary_clean(r.get("text", ""))), reverse=True,
+        ):
+            q = _summary_clean(r.get("text", ""))
+            if len(q) >= 30:
+                if len(q) > 90:
+                    q = q[:90].rsplit(" ", 1)[0] + "…"
+                t = (r.get("title") or "").split("|")[0].strip()
+                highlight = f"\"{q}\" — 《{t[:24]}》 ⭐{rating_to_5(r.get('rating'))}"
+                break
+    if highlight:
+        lines.append(f"\n✨ **주목 후기**\n{highlight}")
+
+    return {
+        "title": f"📊 주간 리뷰 요약 · {start.month}/{start.day}~{today.month}/{today.day}",
+        "description": "\n".join(lines),
+        "color": 0x6366F1,
+        "fields": [{"name": "전체 보기", "value": f"[대시보드 열기]({DASHBOARD_URL})", "inline": False}],
+        "footer": {"text": "이지스퍼블리싱 서점 리뷰 봇 · 주간 요약"},
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+def send_weekly_summary(webhook_url: str):
+    """주간 요약을 (기존 일일 알림과 같은) 웹훅으로 발송. 금요일에만 호출된다."""
+    if not webhook_url:
+        return
+    embed = build_weekly_summary_embed()
+    if not embed:
+        print("[주간 요약] 최근 7일 데이터가 없어 생략")
+        return
+    for url in (u.strip() for u in webhook_url.split(",") if u.strip()):
+        try:
+            r = requests.post(url, json={"embeds": [embed]}, timeout=10)
+            if r.status_code not in (200, 204):
+                print(f"[주간 요약] 발송 실패: HTTP {r.status_code} ({url[:60]}…)")
+            else:
+                print(f"[주간 요약] 발송 완료 → {url[:60]}…")
+        except Exception as e:
+            print(f"[주간 요약] 오류: {e}")
+
+
 # ─── 제목/최신성 헬퍼 ────────────────────────────────────────────────
 # 알림에 포함할 리뷰의 최대 나이(일). 기준점 누락 등으로 과거 리뷰가
 # 뒤늦게 '새 리뷰'로 잡혀 알림이 가는 것을 방지한다.
@@ -808,6 +927,13 @@ def main():
             print("[테스트] --no-discord: '리뷰 없음' 알림도 생략")
         else:
             send_discord_no_reviews(webhook_url)
+
+    # 금요일이면 일일 알림에 이어 '주간 요약'도 발송 (KST 기준, 월=0…금=4)
+    if not args.init and datetime.now(KST).weekday() == 4:
+        if args.no_discord:
+            print("[테스트] --no-discord: 주간 요약 생략")
+        else:
+            send_weekly_summary(webhook_url)
 
 
 if __name__ == "__main__":
