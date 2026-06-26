@@ -131,6 +131,22 @@ header span { font-size: 13px; color: #93c5fd; }
 .ms-row-n { color:#94a3b8; font-size:11px; }
 .ms-row.on .ms-row-n { color:#60a5fa; }
 .ms-empty { padding:10px 8px; color:#94a3b8; font-size:13px; }
+/* 추이 탭 */
+.tr-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; margin-bottom:6px; }
+.tr-stat { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:12px; text-align:center; }
+.tr-stat-v { font-size:22px; font-weight:700; color:#0f2744; }
+.tr-stat-l { font-size:11px; color:#64748b; margin-top:3px; }
+.tr-section-t { font-size:13px; font-weight:700; color:#334155; margin:16px 0 8px; }
+.tr-bars { display:flex; align-items:flex-end; gap:3px; height:170px; background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:10px 10px 4px; overflow-x:auto; }
+.tr-col { flex:1 0 auto; min-width:16px; display:flex; flex-direction:column; align-items:center; height:100%; }
+.tr-v { font-size:10px; color:#1d4ed8; font-weight:700; height:13px; line-height:13px; }
+.tr-barwrap { flex:1; width:100%; display:flex; align-items:flex-end; justify-content:center; }
+.tr-bar { width:72%; max-width:28px; background:linear-gradient(180deg,#60a5fa,#3b82f6); border-radius:4px 4px 0 0; min-height:2px; }
+.tr-bar.z { background:#eef2f7; }
+.tr-x { font-size:9.5px; color:#94a3b8; margin-top:4px; height:13px; white-space:nowrap; }
+.tr-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e8f0; border-radius:10px; overflow:hidden; font-size:13px; }
+.tr-table th { background:#f8fafc; color:#475569; font-weight:600; padding:8px 10px; text-align:left; font-size:12px; }
+.tr-table td { padding:8px 10px; border-top:1px solid #f1f5f9; color:#334155; }
 .best-note { font-size:12px; color:#3730a3; background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px; padding:8px 11px; margin-bottom:14px; line-height:1.6; }
 .best-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px 18px 14px; margin-bottom:12px; }
 .best-quote { font-size:15px; line-height:1.65; color:#1e293b; font-style:italic; }
@@ -296,6 +312,7 @@ header span { font-size: 13px; color: #93c5fd; }
 <div class="main">
   <div class="tabs">
     <button class="tab active" data-tab="reviews" onclick="switchTab('reviews')">리뷰</button>
+    <button class="tab" data-tab="trend" onclick="switchTab('trend')">📈 추이</button>
     <button class="tab" data-tab="insight" onclick="switchTab('insight')">📊 인사이트</button>
     <button class="tab" data-tab="best" onclick="switchTab('best')">📣 마케팅 문구 활용</button>
   </div>
@@ -305,6 +322,7 @@ header span { font-size: 13px; color: #93c5fd; }
       <div class="loading"><div class="spinner"></div>리뷰 데이터를 불러오는 중...</div>
     </div>
   </div>
+  <div id="tab-trend" style="display:none"></div>
   <div id="tab-best" style="display:none"></div>
   <div id="tab-insight" style="display:none"></div>
 </div>
@@ -420,11 +438,127 @@ function scrollToActionNeeded() {
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.getElementById('tab-reviews').style.display = name === 'reviews' ? '' : 'none';
+  document.getElementById('tab-trend').style.display = name === 'trend' ? '' : 'none';
   document.getElementById('tab-best').style.display = name === 'best' ? '' : 'none';
   document.getElementById('tab-insight').style.display = name === 'insight' ? '' : 'none';
   document.querySelector('.toolbar').style.display = name === 'reviews' ? '' : 'none';
+  if (name === 'trend') renderTrend();
   if (name === 'best') renderBest();
   if (name === 'insight') renderInsight();
+}
+
+// ─── 추이 탭 ───────────────────────────────────────────────
+let trendBooks = new Set();
+let trendQuery = '';
+function trendBooksList() {
+  const c = {};
+  allReviews.forEach(r => { const b = (r.title || '').split('|')[0].trim(); if (b) c[b] = (c[b] || 0) + 1; });
+  return Object.keys(c).sort((a, b) => c[b] - c[a]).map(b => ({ book: b, count: c[b] }));
+}
+function renderTrend() {
+  const el = document.getElementById('tab-trend');
+  if (!allReviews.length) { el.innerHTML = `<div class="empty">아직 데이터가 없습니다.</div>`; return; }
+  trendBooks = new Set(); trendQuery = '';
+  el.innerHTML = `<div class="best-head">📈 리뷰 추이 <span class="best-count" id="trend-count">${allReviews.length}</span></div>
+    <div class="ms" id="trend-ms">
+      <button class="ms-btn" onclick="msToggle('trend-ms-panel')"><span id="trend-ms-label">📚 전체 도서</span><span class="ms-caret">▾</span></button>
+      <div class="ms-panel" id="trend-ms-panel" style="display:none">
+        <input class="ms-search" type="text" placeholder="🔍 책 제목 검색…" oninput="trendSearch(this.value)">
+        <div class="ms-actions"><span class="ms-hint">여러 권 선택 가능</span><button class="ms-clear" onclick="trendClearAll()">선택 해제</button></div>
+        <div id="trend-checks" class="ms-list"></div>
+      </div>
+    </div>
+    <div class="best-note">리뷰 수집 시작(6월 초) 이후 데이터예요. 아직 기간이 짧지만 <b>매주 쌓일수록</b> 서평단·캠페인 효과(리뷰가 확 느는 시점)가 더 잘 보입니다. 책을 선택하면 그 책만의 추이를 볼 수 있어요.</div>
+    <div id="trend-body"></div>`;
+  renderTrendChecks();
+  renderTrendBody();
+}
+function trendSearch(v) { trendQuery = v; renderTrendChecks(); }
+function trendToggle(cb) {
+  const b = cb.dataset.book;
+  if (cb.checked) trendBooks.add(b); else trendBooks.delete(b);
+  const r = cb.closest('.ms-row'); if (r) r.classList.toggle('on', cb.checked);
+  trendLabel(); renderTrendBody();
+}
+function trendClearAll() {
+  trendBooks = new Set();
+  document.querySelectorAll('#trend-checks .ms-cb').forEach(c => c.checked = false);
+  document.querySelectorAll('#trend-checks .ms-row').forEach(c => c.classList.remove('on'));
+  trendLabel(); renderTrendBody();
+}
+function trendLabel() {
+  const l = document.getElementById('trend-ms-label'); const n = trendBooks.size;
+  l.textContent = n === 0 ? '📚 전체 도서' : (n === 1 ? [...trendBooks][0] : `${n}권 선택됨`);
+}
+function renderTrendChecks() {
+  const q = trendQuery.trim().toLowerCase();
+  const books = trendBooksList().filter(b => !q || b.book.toLowerCase().includes(q));
+  document.getElementById('trend-checks').innerHTML = books.map(b => {
+    const on = trendBooks.has(b.book);
+    return `<label class="ms-row${on ? ' on' : ''}"><input type="checkbox" class="ms-cb" data-book="${b.book.replace(/"/g, '&quot;')}"${on ? ' checked' : ''} onchange="trendToggle(this)"><span class="ms-row-name">${b.book}</span><span class="ms-row-n">${b.count}</span></label>`;
+  }).join('') || `<div class="ms-empty">검색 결과가 없습니다.</div>`;
+}
+function _weekStart(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7)); // 월요일 시작
+  return toISO(dt);
+}
+function renderTrendBody() {
+  const sel = trendBooks.size
+    ? allReviews.filter(r => trendBooks.has((r.title || '').split('|')[0].trim()))
+    : allReviews;
+  const cnt = document.getElementById('trend-count'); if (cnt) cnt.textContent = sel.length;
+  const wrap = document.getElementById('trend-body');
+  const dated = sel.filter(r => r.date);
+  if (!dated.length) { wrap.innerHTML = `<div class="empty">선택한 책의 리뷰가 없습니다.</div>`; return; }
+
+  // 일별 카운트 (최초 리뷰일 ~ 오늘 범위 채우기)
+  const byDay = {};
+  dated.forEach(r => byDay[r.date] = (byDay[r.date] || 0) + 1);
+  const minD = dated.map(r => r.date).sort()[0];
+  const [yy, mm, dd] = minD.split('-').map(Number);
+  const days = [];
+  for (let d = new Date(yy, mm - 1, dd); toISO(d) <= TODAY; d.setDate(d.getDate() + 1)) days.push(toISO(d));
+  const maxc = Math.max(...days.map(d => byDay[d] || 0), 1);
+  const labelEvery = days.length > 24 ? Math.ceil(days.length / 12) : 1;
+  const bars = days.map((d, i) => {
+    const c = byDay[d] || 0;
+    const [, mo, da] = d.split('-');
+    const lbl = (i % labelEvery === 0) ? `${+mo}/${+da}` : '';
+    return `<div class="tr-col" title="${d}: ${c}건"><div class="tr-v">${c || ''}</div><div class="tr-barwrap"><div class="tr-bar${c ? '' : ' z'}" style="height:${Math.round(c / maxc * 100)}%"></div></div><div class="tr-x">${lbl}</div></div>`;
+  }).join('');
+
+  // 통계
+  const total = dated.length;
+  const peak = days.reduce((a, d) => (byDay[d] || 0) > a.c ? { d, c: byDay[d] || 0 } : a, { d: '', c: 0 });
+  const allR = dated.map(r => parseRating(r.rating)).filter(x => x != null);
+  const avgR = allR.length ? (allR.reduce((s, x) => s + x, 0) / allR.length).toFixed(2) : '-';
+  const peakLbl = peak.d ? `${+peak.d.split('-')[1]}/${+peak.d.split('-')[2]}` : '-';
+
+  // 주간 표 (최신 주 위로)
+  const byWeek = {};
+  dated.forEach(r => { const w = _weekStart(r.date); (byWeek[w] = byWeek[w] || []).push(r); });
+  const weekRows = Object.keys(byWeek).sort().reverse().map(w => {
+    const rs = byWeek[w];
+    const rr = rs.map(r => parseRating(r.rating)).filter(x => x != null);
+    const avg = rr.length ? (rr.reduce((s, x) => s + x, 0) / rr.length).toFixed(2) : '-';
+    const low = rs.filter(r => { const n = parseRating(r.rating); return n != null && n <= 2; }).length;
+    const [, mo, da] = w.split('-');
+    return `<tr><td>${+mo}/${+da} 주~</td><td><b>${rs.length}</b></td><td>⭐${avg}</td><td>${low ? `🚨 ${low}` : '–'}</td></tr>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="tr-stats">
+      <div class="tr-stat"><div class="tr-stat-v">${total}</div><div class="tr-stat-l">리뷰 (${days.length}일간)</div></div>
+      <div class="tr-stat"><div class="tr-stat-v">${(total / days.length).toFixed(1)}</div><div class="tr-stat-l">일평균</div></div>
+      <div class="tr-stat"><div class="tr-stat-v">${peak.c}</div><div class="tr-stat-l">최다일 (${peakLbl})</div></div>
+      <div class="tr-stat"><div class="tr-stat-v">⭐${avgR}</div><div class="tr-stat-l">평균 별점</div></div>
+    </div>
+    <div class="tr-section-t">📅 일별 리뷰 수</div>
+    <div class="tr-bars">${bars}</div>
+    <div class="tr-section-t">🗓️ 주간 요약</div>
+    <table class="tr-table"><thead><tr><th>주 시작</th><th>리뷰</th><th>평균</th><th>대응필요</th></tr></thead><tbody>${weekRows}</tbody></table>`;
 }
 
 // 책 다중선택 드롭다운 패널 토글 (인사이트·마케팅 공용)
