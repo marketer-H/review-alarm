@@ -147,8 +147,11 @@ header span { font-size: 13px; color: #93c5fd; }
 .tr-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e8f0; border-radius:10px; overflow:hidden; font-size:13px; }
 .tr-table th { background:#f8fafc; color:#475569; font-weight:600; padding:8px 10px; text-align:left; font-size:12px; }
 .tr-table td { padding:8px 10px; border-top:1px solid #f1f5f9; color:#334155; }
-.tr-mark { height:15px; font-size:11px; line-height:15px; }
+.tr-mark { height:16px; font-size:14px; line-height:16px; position:relative; z-index:2; }
 .tr-mark span { cursor:default; }
+.tr-col.marked { position:relative; }
+.tr-col.marked::before { content:''; position:absolute; left:50%; top:16px; bottom:17px; transform:translateX(-50%); border-left:2px dashed #ef4444; pointer-events:none; z-index:1; }
+.tr-col.marked .tr-x { color:#ef4444; font-weight:700; }
 .camp-list { background:#fff; border:1px solid #e2e8f0; border-radius:10px; overflow:hidden; }
 .camp-item { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:8px 12px; border-top:1px solid #f1f5f9; font-size:13px; }
 .camp-item:first-child { border-top:none; }
@@ -565,19 +568,25 @@ function renderTrendBody() {
   dated.forEach(r => byDay[r.date] = (byDay[r.date] || 0) + 1);
   const minD = dated.map(r => r.date).sort()[0];
   const [yy, mm, dd] = minD.split('-').map(Number);
-  const days = [];
-  for (let d = new Date(yy, mm - 1, dd); toISO(d) <= TODAY; d.setDate(d.getDate() + 1)) days.push(toISO(d));
-  const maxc = Math.max(...days.map(d => byDay[d] || 0), 1);
-  const labelEvery = days.length > 24 ? Math.ceil(days.length / 12) : 1;
   const dayCamp = {};
   campaigns.filter(campaignVisible).forEach(c => (dayCamp[c.date] = dayCamp[c.date] || []).push(c));
+  // 차트 종료일: 오늘 또는 '예정 캠페인'(최대 +60일)까지 — 예정 캠페인 핀도 그래프에 보이게
+  const t = TODAY.split('-').map(Number);
+  const capISO = toISO(new Date(t[0], t[1] - 1, t[2] + 60));
+  let endISO = TODAY;
+  Object.keys(dayCamp).forEach(d => { if (d > endISO && d <= capISO) endISO = d; });
+  const days = [];
+  for (let d = new Date(yy, mm - 1, dd); toISO(d) <= endISO; d.setDate(d.getDate() + 1)) days.push(toISO(d));
+  const spanDays = days.filter(d => d <= TODAY).length;  // 통계는 과거(오늘까지)만
+  const maxc = Math.max(...days.map(d => byDay[d] || 0), 1);
+  const labelEvery = days.length > 24 ? Math.ceil(days.length / 12) : 1;
   const bars = days.map((d, i) => {
     const c = byDay[d] || 0;
     const [, mo, da] = d.split('-');
-    const lbl = (i % labelEvery === 0) ? `${+mo}/${+da}` : '';
+    const lbl = (i % labelEvery === 0 || i === days.length - 1) ? `${+mo}/${+da}` : '';
     const cps = dayCamp[d];
     const mark = cps ? `<span title="${cps.map(x => x.activity + (x.book && x.book !== '전체' ? ' (' + x.book + ')' : '')).join(', ').replace(/"/g, '&quot;')}">📍</span>` : '';
-    return `<div class="tr-col" title="${d}: ${c}건"><div class="tr-mark">${mark}</div><div class="tr-v">${c || ''}</div><div class="tr-barwrap"><div class="tr-bar${c ? '' : ' z'}" style="height:${Math.round(c / maxc * 100)}%"></div></div><div class="tr-x">${lbl}</div></div>`;
+    return `<div class="tr-col${cps ? ' marked' : ''}" title="${d}: ${c}건"><div class="tr-mark">${mark}</div><div class="tr-v">${c || ''}</div><div class="tr-barwrap"><div class="tr-bar${c ? '' : ' z'}" style="height:${Math.round(c / maxc * 100)}%"></div></div><div class="tr-x">${lbl}</div></div>`;
   }).join('');
 
   // 통계
@@ -607,8 +616,8 @@ function renderTrendBody() {
   }).join('') + `</div>` : '';
   wrap.innerHTML = `
     <div class="tr-stats">
-      <div class="tr-stat"><div class="tr-stat-v">${total}</div><div class="tr-stat-l">리뷰 (${days.length}일간)</div></div>
-      <div class="tr-stat"><div class="tr-stat-v">${(total / days.length).toFixed(1)}</div><div class="tr-stat-l">일평균</div></div>
+      <div class="tr-stat"><div class="tr-stat-v">${total}</div><div class="tr-stat-l">리뷰 (${spanDays}일간)</div></div>
+      <div class="tr-stat"><div class="tr-stat-v">${(total / spanDays).toFixed(1)}</div><div class="tr-stat-l">일평균</div></div>
       <div class="tr-stat"><div class="tr-stat-v">${peak.c}</div><div class="tr-stat-l">최다일 (${peakLbl})</div></div>
       <div class="tr-stat"><div class="tr-stat-v">⭐${avgR}</div><div class="tr-stat-l">평균 별점</div></div>
     </div>
