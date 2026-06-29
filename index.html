@@ -147,6 +147,17 @@ header span { font-size: 13px; color: #93c5fd; }
 .tr-table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e2e8f0; border-radius:10px; overflow:hidden; font-size:13px; }
 .tr-table th { background:#f8fafc; color:#475569; font-weight:600; padding:8px 10px; text-align:left; font-size:12px; }
 .tr-table td { padding:8px 10px; border-top:1px solid #f1f5f9; color:#334155; }
+.tr-mark { height:15px; font-size:11px; line-height:15px; }
+.tr-mark span { cursor:default; }
+.camp-list { background:#fff; border:1px solid #e2e8f0; border-radius:10px; overflow:hidden; }
+.camp-item { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:8px 12px; border-top:1px solid #f1f5f9; font-size:13px; }
+.camp-item:first-child { border-top:none; }
+.camp-date { font-weight:700; color:#0f2744; min-width:36px; }
+.camp-act { color:#1d4ed8; font-weight:600; }
+.camp-book { color:#475569; font-size:12px; }
+.camp-memo { color:#94a3b8; font-size:12px; }
+.camp-item.future { opacity:.75; }
+.camp-tag { font-size:10px; background:#fef3c7; color:#b45309; border-radius:5px; padding:1px 6px; }
 .best-note { font-size:12px; color:#3730a3; background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px; padding:8px 11px; margin-bottom:14px; line-height:1.6; }
 .best-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:14px 18px 14px; margin-bottom:12px; }
 .best-quote { font-size:15px; line-height:1.65; color:#1e293b; font-style:italic; }
@@ -450,6 +461,41 @@ function switchTab(name) {
 // ─── 추이 탭 ───────────────────────────────────────────────
 let trendBooks = new Set();
 let trendQuery = '';
+
+// 캠페인 로그 (구글시트 라이브 연동 → 추이 그래프 마커)
+const CAMPAIGN_CSV = "https://docs.google.com/spreadsheets/d/1hAeLkbYv5x6Z6ynZpaVeAAzRfvdhomznhRofawlnBoU/export?format=csv&gid=0";
+let campaigns = [];
+let campaignsLoaded = false;
+function parseCSV(text) {
+  const rows = []; let row = [], field = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else q = false; }
+      else field += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else if (ch !== '\r') field += ch;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+async function loadCampaigns() {
+  try {
+    const r = await fetch(CAMPAIGN_CSV + '&_=' + Date.now());
+    campaigns = parseCSV(await r.text()).slice(1)
+      .map(c => ({ date: (c[0] || '').trim(), activity: (c[1] || '').trim(), book: (c[2] || '').trim(), memo: (c[3] || '').trim() }))
+      .filter(c => /^\d{4}-\d{2}-\d{2}$/.test(c.date));
+  } catch (e) { campaigns = []; }
+  campaignsLoaded = true;
+}
+function campaignVisible(c) {
+  if (!trendBooks.size) return true;
+  if (!c.book || c.book === '전체') return true;
+  return [...trendBooks].some(b => b.includes(c.book) || c.book.includes(b));
+}
+
 function trendBooksList() {
   const c = {};
   allReviews.forEach(r => { const b = (r.title || '').split('|')[0].trim(); if (b) c[b] = (c[b] || 0) + 1; });
@@ -472,6 +518,7 @@ function renderTrend() {
     <div id="trend-body"></div>`;
   renderTrendChecks();
   renderTrendBody();
+  if (!campaignsLoaded) loadCampaigns().then(renderTrendBody);
 }
 function trendSearch(v) { trendQuery = v; renderTrendChecks(); }
 function trendToggle(cb) {
@@ -522,11 +569,15 @@ function renderTrendBody() {
   for (let d = new Date(yy, mm - 1, dd); toISO(d) <= TODAY; d.setDate(d.getDate() + 1)) days.push(toISO(d));
   const maxc = Math.max(...days.map(d => byDay[d] || 0), 1);
   const labelEvery = days.length > 24 ? Math.ceil(days.length / 12) : 1;
+  const dayCamp = {};
+  campaigns.filter(campaignVisible).forEach(c => (dayCamp[c.date] = dayCamp[c.date] || []).push(c));
   const bars = days.map((d, i) => {
     const c = byDay[d] || 0;
     const [, mo, da] = d.split('-');
     const lbl = (i % labelEvery === 0) ? `${+mo}/${+da}` : '';
-    return `<div class="tr-col" title="${d}: ${c}건"><div class="tr-v">${c || ''}</div><div class="tr-barwrap"><div class="tr-bar${c ? '' : ' z'}" style="height:${Math.round(c / maxc * 100)}%"></div></div><div class="tr-x">${lbl}</div></div>`;
+    const cps = dayCamp[d];
+    const mark = cps ? `<span title="${cps.map(x => x.activity + (x.book && x.book !== '전체' ? ' (' + x.book + ')' : '')).join(', ').replace(/"/g, '&quot;')}">📍</span>` : '';
+    return `<div class="tr-col" title="${d}: ${c}건"><div class="tr-mark">${mark}</div><div class="tr-v">${c || ''}</div><div class="tr-barwrap"><div class="tr-bar${c ? '' : ' z'}" style="height:${Math.round(c / maxc * 100)}%"></div></div><div class="tr-x">${lbl}</div></div>`;
   }).join('');
 
   // 통계
@@ -548,6 +599,12 @@ function renderTrendBody() {
     return `<tr><td>${+mo}/${+da} 주~</td><td><b>${rs.length}</b></td><td>⭐${avg}</td><td>${low ? `🚨 ${low}` : '–'}</td></tr>`;
   }).join('');
 
+  const visCamps = campaigns.filter(campaignVisible).slice().sort((a, b) => b.date.localeCompare(a.date));
+  const campHtml = visCamps.length ? `<div class="tr-section-t">📍 캠페인 로그</div><div class="camp-list">` + visCamps.map(c => {
+    const fut = c.date > TODAY;
+    const [, mo, da] = c.date.split('-');
+    return `<div class="camp-item${fut ? ' future' : ''}"><span class="camp-date">${+mo}/${+da}</span><span class="camp-act">${c.activity || ''}</span>${c.book && c.book !== '전체' ? `<span class="camp-book">《${c.book}》</span>` : ''}${c.memo ? `<span class="camp-memo">${c.memo}</span>` : ''}${fut ? `<span class="camp-tag">예정</span>` : ''}</div>`;
+  }).join('') + `</div>` : '';
   wrap.innerHTML = `
     <div class="tr-stats">
       <div class="tr-stat"><div class="tr-stat-v">${total}</div><div class="tr-stat-l">리뷰 (${days.length}일간)</div></div>
@@ -558,7 +615,8 @@ function renderTrendBody() {
     <div class="tr-section-t">📅 일별 리뷰 수</div>
     <div class="tr-bars">${bars}</div>
     <div class="tr-section-t">🗓️ 주간 요약</div>
-    <table class="tr-table"><thead><tr><th>주 시작</th><th>리뷰</th><th>평균</th><th>대응필요</th></tr></thead><tbody>${weekRows}</tbody></table>`;
+    <table class="tr-table"><thead><tr><th>주 시작</th><th>리뷰</th><th>평균</th><th>대응필요</th></tr></thead><tbody>${weekRows}</tbody></table>
+    ${campHtml}`;
 }
 
 // 책 다중선택 드롭다운 패널 토글 (인사이트·마케팅 공용)
@@ -900,6 +958,7 @@ async function load() {
     catch (e) { marketingQuotes = []; }
     try { bookInsights = await (await fetch('book_insights.json?_=' + Date.now())).json(); }
     catch (e) { bookInsights = []; }
+    loadCampaigns();  // 캠페인 로그(구글시트) 백그라운드 로딩
 
     const dates = [...new Set(allReviews.map(r=>r.date))].sort((a,b)=>b.localeCompare(a));
     dateCounts = {};
