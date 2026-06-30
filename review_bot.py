@@ -529,76 +529,61 @@ def save_reviews_log(new_reviews: list):
         json.dump(log, f, ensure_ascii=False, indent=2)
 
 
-def send_discord(webhook_url: str, new_reviews: list):
-    """하루치 요약 1개 + 리뷰 본문 + 대시보드 링크 발송. webhook_url은 쉼표 구분 다중 URL 허용."""
-    if not webhook_url:
-        print("[Discord] config.json에 discord_webhook URL이 없습니다.")
-        return
-    if not new_reviews:
-        return
-
+def build_daily_embed(new_reviews: list) -> dict:
+    """간단 요약 알림 embed: 총건수 + 서점별 + 책별 건수 + 대응 필요만. 리뷰 본문은 대시보드로."""
+    from collections import Counter
     today = datetime.now(KST).strftime("%Y-%m-%d")
+    total = len(new_reviews)
+    flagged = [rv for rv in new_reviews if needs_response(rv)]
 
-    # 책별 그룹
-    from collections import defaultdict
-    by_book: dict = defaultdict(list)
-    for rv in new_reviews:
-        by_book[rv["title"]].append(rv)
+    sc = Counter(rv.get("store", "") for rv in new_reviews)
+    store_line = " · ".join(
+        f"{STORE_EMOJI.get(s, '▪️')} {STORE_NAMES.get(s, s)} {c}" for s, c in sc.most_common()
+    )
 
-    # 책별 요약 + 리뷰 본문 (embed description 한도 4096자 내에서 리뷰 단위로 자름)
-    MAX_DESC = 3800
-    parts = []
-    used = 0
-    shown = 0
-    truncated = False
-    flagged_total = sum(1 for rv in new_reviews if needs_response(rv))
-    def _book_key(item):
-        # 대응 필요 리뷰가 있는 책을 맨 위로, 그다음 리뷰 많은 순
-        return (not any(needs_response(rv) for rv in item[1]), -len(item[1]))
-    for title, rvs in sorted(by_book.items(), key=_book_key):
-        rvs = sorted(rvs, key=lambda rv: not needs_response(rv))  # 대응 필요 리뷰 먼저
-        header = f"\n**{title[:30]}** — {len(rvs)}개" if parts else f"**{title[:30]}** — {len(rvs)}개"
-        if used + len(header) > MAX_DESC:
-            truncated = True
-            break
-        parts.append(header)
-        used += len(header)
-        for rv in rvs:
-            emoji = STORE_EMOJI.get(rv.get("store", ""), "▪️")
-            flag = "🚨 " if needs_response(rv) else ""
-            meta = " · ".join(x for x in (rv.get("rating", ""), rv.get("date", ""), rv.get("reviewer", "")) if x)
-            text = rv.get("text", "").strip()
-            if len(text) > 150:
-                text = text[:150] + "…"
-            chunk = f"{flag}{emoji} {meta}".rstrip() + f"\n> {text} [↗]({rv.get('link', DASHBOARD_URL)})"
-            if used + len(chunk) > MAX_DESC:
-                truncated = True
-                break
-            parts.append(chunk)
-            used += len(chunk)
-            shown += 1
-        if truncated:
-            break
-    if truncated:
-        parts.append(f"…외 {len(new_reviews) - shown}개는 대시보드에서 확인하세요.")
+    by_book = Counter((rv.get("title") or "").split("|")[0].strip() for rv in new_reviews)
+    parts = [store_line, ""]
+    parts += [f"• {b[:30]} — {c}" for b, c in by_book.most_common(10)]
+    if len(by_book) > 10:
+        parts.append(f"• 외 {len(by_book) - 10}권")
 
-    description = "\n".join(parts)
-    total_count = len(new_reviews)
+    if flagged:
+        parts += ["", "🚨 **대응 필요**"]
+        for rv in flagged[:5]:
+            b = (rv.get("title") or "").split("|")[0].strip()
+            n = rating_to_5(rv.get("rating"))
+            star = f"★{n:g} · " if n is not None else ""
+            parts.append(f"• 《{b[:24]}》 {star}{STORE_NAMES.get(rv.get('store', ''), '')}")
+        if len(flagged) > 5:
+            parts.append(f"…외 {len(flagged) - 5}건")
 
-    title_line = f"📬 오늘의 서점 리뷰 알림 — 총 {total_count}개"
-    if flagged_total:
-        title_line += f"  ·  🚨 대응 필요 {flagged_total}건"
-    embed = {
+    parts += ["", "👉 자세한 내용은 대시보드에서 확인하세요"]
+
+    title_line = f"📬 오늘 새 리뷰 {total}개"
+    if flagged:
+        title_line += f"  ·  🚨 대응 필요 {len(flagged)}건"
+
+    return {
         "title": title_line,
-        "description": description,
+        "description": "\n".join(parts),
         "color": 0x3B82F6,
         "fields": [{"name": "전체 리뷰 보기", "value": f"[대시보드 열기]({DASHBOARD_URL})", "inline": False}],
         "footer": {"text": f"이지스퍼블리싱 서점 리뷰 봇 · {today}"},
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
 
-    urls = [u.strip() for u in webhook_url.split(",") if u.strip()]
-    for url in urls:
+
+def send_discord(webhook_url: str, new_reviews: list):
+    """간단 요약 알림 발송. webhook_url은 쉼표 구분 다중 URL 허용."""
+    if not webhook_url:
+        print("[Discord] config.json에 discord_webhook URL이 없습니다.")
+        return
+    if not new_reviews:
+        return
+
+    embed = build_daily_embed(new_reviews)
+    total_count = len(new_reviews)
+    for url in (u.strip() for u in webhook_url.split(",") if u.strip()):
         try:
             r = requests.post(url, json={"embeds": [embed]}, timeout=10)
             if r.status_code not in (200, 204):
