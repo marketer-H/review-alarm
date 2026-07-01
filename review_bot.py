@@ -745,13 +745,6 @@ def send_weekly_summary(webhook_url: str):
 # 뒤늦게 '새 리뷰'로 잡혀 알림이 가는 것을 방지한다.
 ALERT_MAX_AGE_DAYS = 30
 
-# 대응(응대)이 필요한 리뷰를 가려내는 문제 키워드
-ALERT_KEYWORDS = (
-    "환불", "반품", "파본", "파손", "훼손", "오타", "오류", "에러",
-    "안 돼", "안돼", "안 됨", "안됨", "작동 안", "실행 안", "동작 안",
-    "실망", "최악", "비추", "누락", "불량", "엉터리", "쓰레기",
-)
-
 def rating_to_5(raw):
     """별점 문자열을 5점 만점으로 환산. 실패 시 None. (대시보드 parseRating과 동일 규칙)"""
     if not raw:
@@ -766,11 +759,9 @@ def rating_to_5(raw):
     return round(n / mx * 5, 1)
 
 def needs_response(rv: dict) -> bool:
-    """대응이 필요한 리뷰: 5점 환산 ★2 이하 또는 본문에 문제 키워드 포함."""
+    """대응이 필요한 리뷰: 5점 환산 ★2 이하. (대시보드 needsResponse와 동일 기준)"""
     n = rating_to_5(rv.get("rating"))
-    if n is not None and n <= 2:
-        return True
-    return any(k in (rv.get("text") or "") for k in ALERT_KEYWORDS)
+    return n is not None and n <= 2
 
 def best_title(isbn: str, cache: dict) -> str:
     """서점별로 제목이 다르게(또는 ISBN으로) 잡히는 문제 방지: 캐시에서
