@@ -166,6 +166,8 @@ header span { font-size: 13px; color: #93c5fd; }
 .best-quote { font-size:15px; line-height:1.65; color:#1e293b; font-style:italic; }
 .best-meta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; border-top:1px solid #f1f5f9; margin-top:10px; padding-top:10px; }
 .best-attr { font-size:12px; color:#64748b; font-weight:600; }
+#card-lb { display:none; position:fixed; inset:0; background:rgba(15,23,42,.82); z-index:100; align-items:center; justify-content:center; padding:24px; cursor:zoom-out; }
+#card-lb img { max-width:min(92vw,540px); max-height:92vh; border-radius:14px; box-shadow:0 20px 60px rgba(0,0,0,.45); }
 .ins-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:16px 18px; margin-bottom:12px; }
 .ins-head { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid #f1f5f9; }
 .ins-book { font-size:15px; font-weight:700; color:#0f2744; }
@@ -340,6 +342,8 @@ header span { font-size: 13px; color: #93c5fd; }
   <div id="tab-best" style="display:none"></div>
   <div id="tab-insight" style="display:none"></div>
 </div>
+
+<div id="card-lb" onclick="this.style.display='none'"><img alt="마케팅 카드 이미지"></div>
 
 <script>
 let allReviews = [];
@@ -659,7 +663,7 @@ function renderBest() {
         <div id="best-checks" class="ms-list"></div>
       </div>
     </div>
-    <div class="best-note"><b>이렇게 골랐어요</b> — 실제 독자 후기 중 <b>구체적이고 설득력 있는 문장</b>만 추려, 협찬 고지·군더더기를 정리해 다듬은 추천 카피입니다. <b>문구 복사</b>를 누르면 출처까지 붙어 복사돼요. (SNS·상세페이지·카드뉴스에 바로 활용)</div>
+    <div class="best-note"><b>이렇게 골랐어요</b> — 실제 독자 후기 중 <b>구체적이고 설득력 있는 문장</b>만 추려, 협찬 고지·군더더기를 정리해 다듬은 추천 카피입니다. <b>문구 복사</b>로 텍스트를, <b>🖼️ 카드</b>로 인스타용 카드 이미지를 볼 수 있어요.</div>
     <div id="best-cards"></div>`;
   renderBestChecks();
   renderBestCards();
@@ -703,7 +707,8 @@ function renderBestCards() {
       <div class="best-quote">“${x.quote}”</div>
       <div class="best-meta">
         <span class="best-attr">《${x.book}》 · ${storeLabel(x.store)} ⭐${n}점 · ${x.reviewer || ''}</span>
-        <button class="an-copy" style="margin-left:auto" onclick="copyBest(this)">📋 문구 복사</button>
+        <button class="an-copy" style="margin-left:auto" onclick="openCardImg('${x._img}')">🖼️ 카드</button>
+        <button class="an-copy" onclick="copyBest(this)">📋 복사</button>
       </div>
       <div class="best-copy" style="display:none">${copyStr}</div>
     </div>`;
@@ -715,6 +720,12 @@ function copyBest(btn) {
   navigator.clipboard.writeText(t).then(() => {
     const o = btn.textContent; btn.textContent = '복사됨'; setTimeout(() => btn.textContent = o, 1500);
   });
+}
+function openCardImg(src) {
+  const lb = document.getElementById('card-lb');
+  const img = lb.querySelector('img');
+  img.src = src;
+  lb.style.display = 'flex';
 }
 
 // 인사이트: book_insights.json(책별 칭찬 포인트 / 아쉬운 점 요약)을 표시
@@ -965,6 +976,7 @@ async function load() {
 
     try { marketingQuotes = await (await fetch('marketing_quotes.json?_=' + Date.now())).json(); }
     catch (e) { marketingQuotes = []; }
+    { const bc = {}; marketingQuotes.forEach(q => { bc[q.book] = (bc[q.book] || 0) + 1; q._img = 'cards/' + encodeURIComponent(q.book.replace(/[\\/:*?"<>|]/g, '_') + '_' + bc[q.book] + '.png'); }); }
     try { bookInsights = await (await fetch('book_insights.json?_=' + Date.now())).json(); }
     catch (e) { bookInsights = []; }
     loadCampaigns();  // 캠페인 로그(구글시트) 백그라운드 로딩
