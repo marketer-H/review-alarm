@@ -23,23 +23,54 @@ def esc(s):
 def safe_name(s):
     return re.sub(r'[\\/:*?"<>|]', "_", s).strip()
 
+def _load_book_isbn():
+    """isbn_cache.json의 제목→ISBN 매핑(교보 표지용). 책 본제목(| 앞) 기준."""
+    m = {}
+    try:
+        c = json.load(open(BASE / "isbn_cache.json", encoding="utf-8"))
+        for k, v in c.items():
+            if isinstance(v, str) and "title" in k:
+                mm = re.search(r"(\d{13})", k)
+                if mm:
+                    m.setdefault(v.split("|")[0].strip(), mm.group(1))
+    except Exception:
+        pass
+    return m
+BOOK_ISBN = _load_book_isbn()
+
+def _dl(url):
+    try:
+        im = requests.get(url, headers={"User-Agent": UA}, timeout=15)
+        if im.status_code == 200 and len(im.content) > 8000 and im.content[:3] in (b"\xff\xd8\xff", b"\x89PN"):
+            return im.content
+    except Exception:
+        pass
+    return None
+
 def fetch_cover_b64(title):
-    """알라딘 검색 첫 결과 표지 → base64 data URI. 실패 시 None. (책별 파일 캐시)"""
+    """고해상도 표지 → base64. 교보(ISBN) 1순위, 알라딘 cover500 백업. 책별 파일 캐시."""
     cache = COVER_DIR / (safe_name(title) + ".jpg")
     if cache.exists():
         return "data:image/jpeg;base64," + base64.b64encode(cache.read_bytes()).decode()
-    try:
-        u = "https://www.aladin.co.kr/search/wsearchresult.aspx?SearchWord=" + urllib.parse.quote(title)
-        r = requests.get(u, headers={"User-Agent": UA}, timeout=15)
-        m = re.search(r'https://image\.aladin\.co\.kr/product/\d+/\d+/cover\w*/[^\s"\'>]+?\.(?:jpg|png)', r.text)
-        if not m:
-            return None
-        img = requests.get(m.group(0), headers={"User-Agent": UA}, timeout=15)
-        if img.status_code == 200 and len(img.content) > 2000:
-            cache.write_bytes(img.content)
-            return "data:image/jpeg;base64," + base64.b64encode(img.content).decode()
-    except Exception as e:
-        print("    [표지 실패]", title, e)
+    data = None
+    isbn = BOOK_ISBN.get(title)
+    if isbn:
+        data = _dl(f"https://contents.kyobobook.co.kr/sih/fit-in/600x0/pdt/{isbn}.jpg")
+    if not data:
+        try:
+            u = "https://www.aladin.co.kr/search/wsearchresult.aspx?SearchWord=" + urllib.parse.quote(title)
+            r = requests.get(u, headers={"User-Agent": UA}, timeout=15)
+            m = re.search(r'https://image\.aladin\.co\.kr/product/\d+/\d+/[^/]+/[^\s"\'>]+?\.(?:jpg|png)', r.text)
+            if m:
+                for c in [re.sub(r'(/product/\d+/\d+/)[^/]+/', r'\g<1>cover500/', m.group(0)), m.group(0)]:
+                    data = _dl(c)
+                    if data:
+                        break
+        except Exception as e:
+            print("    [표지 실패]", title, e)
+    if data:
+        cache.write_bytes(data)
+        return "data:image/jpeg;base64," + base64.b64encode(data).decode()
     return None
 
 TEMPLATE = """<!doctype html><html><head><meta charset='utf-8'>
@@ -101,13 +132,16 @@ def main():
         for item in targets:
             b = item["book"]; idx[b] = idx.get(b, 0) + 1
             out = OUT / f"{safe_name(b)}_{idx[b]}.png"
-            pg = browser.new_page(viewport={"width": 1080, "height": 1080}, device_scale_factor=1)
-            pg.set_content(build_html(item, covers[b]), wait_until="networkidle")
-            pg.wait_for_timeout(700)
-            pg.screenshot(path=str(out), clip={"x": 0, "y": 0, "width": 1080, "height": 1080})
-            pg.close()
-            made.append(out.name)
-            print(f"    저장: {out.name}")
+            try:
+                pg = browser.new_page(viewport={"width": 1080, "height": 1080}, device_scale_factor=1)
+                pg.set_content(build_html(item, covers[b]), wait_until="load")
+                pg.wait_for_timeout(900)
+                pg.screenshot(path=str(out), clip={"x": 0, "y": 0, "width": 1080, "height": 1080})
+                pg.close()
+                made.append(out.name)
+                print(f"    저장: {out.name}")
+            except Exception as e:
+                print(f"    [렌더 실패] {out.name}: {e}")
         browser.close()
     print(f"[완료] {len(made)}장 → {OUT}")
 
