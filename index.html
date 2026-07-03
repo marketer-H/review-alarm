@@ -333,7 +333,8 @@ header span { font-size: 13px; color: #93c5fd; }
     <button class="tab active" data-tab="reviews" onclick="switchTab('reviews')">리뷰</button>
     <button class="tab" data-tab="insight" onclick="switchTab('insight')">📊 인사이트</button>
     <button class="tab" data-tab="best" onclick="switchTab('best')">📣 마케팅 문구 활용</button>
-    <button class="tab" data-tab="trend" onclick="switchTab('trend')">📈 추이</button>
+    <!-- 숨김: 리뷰 추이는 캠페인 ROI(판매) 측정엔 약해서 비활성화. 복원하려면 이 주석만 풀면 됨 -->
+    <!-- <button class="tab" data-tab="trend" onclick="switchTab('trend')">📈 추이</button> -->
   </div>
   <div id="tab-reviews">
     <div class="stats" id="stats" style="display:none"></div>
