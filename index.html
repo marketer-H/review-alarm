@@ -351,6 +351,7 @@ header span { font-size: 13px; color: #93c5fd; }
 
 <script>
 let allReviews = [];
+let bookLatest = {};
 
 const storeLabel = s => ({ aladin:'알라딘', yes24:'예스24', kyobo:'교보문고' }[s] || s);
 const DAYS = ['일','월','화','수','목','금','토'];
@@ -647,8 +648,10 @@ let marketingQuotes = [];
 let bestChecked = new Set();
 let bestQuery = '';
 function bestBooksList() {
-  const c = {}; marketingQuotes.forEach(x => c[x.book] = (c[x.book] || 0) + 1);
-  return Object.keys(c).sort((a, b) => c[b] - c[a]).map(b => ({ book: b, count: c[b] }));
+  // marketingQuotes가 최신순 정렬돼 있으므로 첫 등장 순서 = 최신순
+  const c = {}, order = [];
+  marketingQuotes.forEach(x => { if (!(x.book in c)) { c[x.book] = 0; order.push(x.book); } c[x.book]++; });
+  return order.map(b => ({ book: b, count: c[b] }));
 }
 function renderBest() {
   const el = document.getElementById('tab-best');
@@ -985,6 +988,11 @@ async function load() {
     { const bc = {}; marketingQuotes.forEach(q => { bc[q.book] = (bc[q.book] || 0) + 1; q._img = 'cards/' + encodeURIComponent(q.book.replace(/[\\/:*?"<>|]/g, '_') + '_' + bc[q.book] + '.png'); }); }
     try { bookInsights = await (await fetch('book_insights.json?_=' + Date.now())).json(); }
     catch (e) { bookInsights = []; }
+    // 책별 최신 리뷰일 계산 → 인사이트·마케팅 문구 최신순 정렬 (_img 지정 후에 정렬)
+    bookLatest = {};
+    allReviews.forEach(r => { const b = (r.title || '').split('|')[0].trim(); if (r.date && (!(b in bookLatest) || r.date > bookLatest[b])) bookLatest[b] = r.date; });
+    marketingQuotes.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    bookInsights.sort((a, b) => (bookLatest[b.book] || '').localeCompare(bookLatest[a.book] || ''));
     loadCampaigns();  // 캠페인 로그(구글시트) 백그라운드 로딩
 
     const dates = [...new Set(allReviews.map(r=>r.date))].sort((a,b)=>b.localeCompare(a));
