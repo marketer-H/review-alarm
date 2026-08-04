@@ -364,8 +364,8 @@ def _parse_yes24_reviews(html: str, title: str, pid: str) -> list:
     blocks = re.split(r'<div class="reviewInfoGrp', html)
 
     for block in blocks[1:]:
-        # 리뷰 ID (OpenReviewReport 에서)
-        id_m = re.search(r"OpenReviewReport\((\d+)\)", block)
+        # 리뷰 ID (OpenReviewReport 에서 — 인자 2개로 바뀜: OpenReviewReport(id, this))
+        id_m = re.search(r"OpenReviewReport\((\d+)", block)
         rv_id = id_m.group(1) if id_m else None
         if not rv_id:
             continue
@@ -460,7 +460,7 @@ def get_kyobo_reviews(isbn: str, cache: dict) -> tuple:
     try:
         # revwPatrCode=000: 전체 리뷰(구매평+일반), reviewSort=002: 최신순
         url = (
-            "https://product.kyobobook.co.kr/api/review/list"
+            "https://product.kyobobook.co.kr/api/gw/pdt/review/list"
             "?page=1&pageLimit=50&reviewSort=002&revwPatrCode=000"
             f"&saleCmdtids={product_id}&webToonYsno=N&allYsno=N"
             f"&revwSummeryYn=Y&saleCmdtid={product_id}"
